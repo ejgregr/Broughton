@@ -1,0 +1,588 @@
+---
+title: "Broughton ecological classification"
+author: "Edward Gregr
+date: "May 01 2024"
+output:
+  html_document: 
+    keep_md: yes
+    theme: yeti
+    highlight: haddock
+    toc: yes
+    toc_float: yes
+---
+<style type="text/css">
+#TOC {
+  color: black;
+}
+</style>
+
+```{r Introduction, include=FALSE, cache= FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      fig.width = 7, fig.height = 5.5,dpi = 300, out.width = '100%', fig.align="center")
+knitr.table.format = 'html'
+```
+This work will support 2 distinct, but related projects. First, for DFO, the classification will provide a framework, based on the existing, substantial body of existing data, to support the organisation and subsequent analysis of relevant macroalgal data for the Pacific Regions. Second, as pat of the BC-funded climate ready seafood program, this work will provide a regional classification of the Broughton region that will provide a summary of local physical data relevant to local communities. We hope it will provide a pathway to weave together scientific and Indigenous knowledge, while also underpinning the spatial analyses envisioned by the Local Seaweed Services Model (LSSM).
+
+# Objective
+From the DFO statement of work: This project will provide an R script to generate clusters representing areas of common environmental conditions from existing spatial layers, with examples of outputs generated across two spatial extents (i.e., Broughton Archipelago and the Queen Charlotte Strait region).
+
+From the Broughton RSSM proposal, the objective is to classify the study area into a polygon representation suitable for supporting the spatial analyses of the LSSM. We will; 1) standardize available data sets to best reasonable spatial resolution (likely the local 20 x 20 m2 bathymetric grid - Davies et al. 2020); and 2) Prepare a classification analysis examining how spatial extents influence clusters created with the k-means clustering algorithm.
+
+## Background   
+Following the methods of Mora-Soto et al. 2024, create a k-means clustering of biophysical layers to support the representation of kelp habitat in British Columbia, with a particular focus on the Broughton region.
+
+## Data summary
+A collection of 20x20 m2 coastal TIFFs to be classified using k-means. Homemade masks (2) of restrictions to the study area as shape files.  
+
+```{r Data_Load, include=FALSE, echo=FALSE}
+# Spatial data are loaded as TIFFs
+# Study area masks are imported as two shape files with one feature each. 
+
+
+#---------------------
+# DATA CLEAN UP
+#dim( new.data )
+#rm( clean.dat )
+
+
+#--------------------------------------------
+#--- Part 1: Explore cluster number with scree plot and 
+
+
+```
+After Loading, I cleaned and classified the data brick.
+
+```{r DataSummary, warning=FALSE, message=FALSE, echo=FALSE}
+xx <- table( clean.dat$ORIGIN )
+xx <- c( xx, sum(xx))
+data.frame("Group"=c("Fry", "Marked smolts", "Unmarked smolts", "Total"),
+           "N"= as.vector(xx)) %>% kable( caption = "Total number of stomachs for each of three life history groups." )
+
+xx <- table( new.data$ORIGIN, new.data$INOR )
+xx <- rbind( xx, colSums(xx))
+rownames(xx) <- c("Fry", "Marked smolts", "Unmarked smolts", "Total")
+colnames(xx) <- c("Absent", "Present")
+kable( xx, caption = "Presence/absence of inorganic matter in stomach samples by life history groups.")
+```
+
+
+NOTES:  
+1) The totals in the data set are somewhat different than reported in Nishimura et al. (1995).  
+2) The data for some stomachs are incomplete, leading to lower totals than the total sample size in most analyses. This is noted in results where relevant.  
+
+# Methods
+To compare stomach contents across fry and smolts we looked at trends over time and space. We report monthly values (mean and standard deviation) of forage ratio, prey abundance, prey richness, and prey diversity (Figure 1). Because of the limited number of marked smolts, we limited the analysis to Chinook fry and unmarked smolts. 
+
+We defined *forage ratio* as the total stomach weight/(fish weight - total stomach weight), *abundance* as the total number of prey items found in a stomach, *richness* as the total number of taxa found in a stomach, and *prey diversity* using the Simpson's diversity index. There was a total of **(n=166)** different prey found in the stomachs. We used the same four letter codes for taxa names as Nishimura et al (1995) (see Appendix Table 1 of this report).
+
+There are four parts to the analysis. We first looked at the metrics for all prey types, comparing the fry and smolt groups across months (Fig. 1). We then disaggregated the data by transect, to  see if there was any notable change in distance from shore across months (Fig. 2). 
+
+In part two we grouped the metrics according to the dominant prey grouping in Levings (2004), Table 2. These prey groups are associated with specific habitats. We assumed the following seven groupings represent different sources of prey production for juvenile Chinook salmon: 1) marshy shoreline of Queens Reach: chironomid adults, diptera pupae and larvae (CHIR); 2) river channel: cladocerans (Crustacea, CLAD); 3-7): groups from gravel reaches upstream from Queens Reach including Emphemeroptera (EPHE), Plecoptera (PLEC) and Trichoptera (TRIC) groupings; and taxa from arborial trees and shrubs (ARBO). Fry and smolts shared all prey groups except there is no CLAD in smolt diets, and no TRIC in fry diets.
+
+The groups were created by aggregating data from lower taxonomic units (see Table XX - The crosswalk table in xls) and account for over 70% of the dominant food groups for fry and about 60% of the dominant food groups for smolts. We examined the habitat group metrics across month, and across transect by month (Figs. 3, 4).
+
+In part three we examined the distribution of grouped prey items across transects and months separately for fry and smolts using violin plots (Figures 5 and 6). Violin plots are a hybrid of a box plot and a density plot. They are used to visualize the distribution of numerical data. They can be overlaid with box plot summary statistics, and together depict both the summary statistics and the density of each variable.
+
+Part four describes the ordination applied to the numerical abundance of the 24 most common prey taxa (Table 2 from Nishimura et al. 1995). For each stomach, we counted the abundance of each of the 25 dominant prey items and used these counts in the ordination. We used the square root transform, and applied nonmetric, multidimensional scalaing (NMDS) ordination using the Bray-Curtis dissimilarity index, with no internal transformations. Also, because of the high number of pairs with no overlap in prey, extended dissimilarities were used in for all no-overlap cases (see the vegan package and De'ath (1999) for details). 
+
+Environmental co-variates included FLOW (surface current speed at time of sampling, see Whitehouse and Levings, 1989), DISCHARGE (daily discharge at Port Mann from Water Survey of Canada), and MONTH. We removed TEMP because we found it highly correlated with MONTH and DISCHARGE.
+
+<!-- ### This code currently commented because the lengths for fry and smolts are  -->
+<!-- ### different and putting this in the report is out of scope. -->
+<!-- __*Tables: Top prey taxa for Chinook Fry and Smolt showing the new prey codes, and the original prey codes for each age class.*__ -->
+<!-- ```{r Top20Table, warning=FALSE, message=FALSE, echo=FALSE} -->
+
+<!-- xx <- data.frame( 'New' = top.23[top.23$group =='fry', 'new_code'], -->
+<!--                   'Fry' = top.23[top.23$group =='fry', 'source_code'], -->
+<!--                 'Smolt' = top.23[top.23$group =='smolts_unmarked', 'source_code'] ) -->
+
+<!-- colnames(xx) <- c('New', 'Fry', 'Smolt') -->
+<!-- kable( xx ) -->
+
+<!-- ``` -->
+
+NOTES:  
+In a recent juvenile salmon feeding study on coastal BC Zahner 2021 used "Relative prey biomass for each stomach (% of total wet weight) was calculated and arcsine square root transformed before calculating Bray-Curtis dissimilarity". Our current transform is just square root because arcsin requires values < 1. Also, the database we used does not include biomass of individual prey taxa. However we expect results using numerical abundance will be similar.
+
+Also from Zahner 2021 - "Vectors were overlaid to show direction and magnitude of the main taxonomic prey groups driving dissimilarity". We overlaid environmental predictors and these show some strong effects. Using main taxonomic groups doesn't work well because these groups are different for fry vs. smolts (Table 2 in Levings, 2004).
+
+*De’ath, Glenn. “Extended Dissimilarity: A Method of Robust Estimation of Ecological Distances from High Beta Diversity Data.” Plant Ecology 144, no. 2 (1999): 191–99. http://www.jstor.org/stable/20050827.*
+
+*Zahner (Skil Jaadaa), V. R. (2021). Strategies for coexisting : juvenile pink and chum salmon diets and interactions in a challenging section of coastal migration (T). University of British Columbia. Retrieved from https://open.library.ubc.ca/collections/ubctheses/24/items/1.0396439*
+
+## R packages
+
+dplyr: A fast, consistent set of tools for working with data frame like objects, both in memory and out of memory.  
+
+ggplot2: A system for 'declaratively' creating graphics based on ``The Grammar of Graphics''. You provide the data, tell 'ggplot2' how to map variables to aesthetics, what graphical primitives to use, and it takes care of the details.  
+
+Hmisc: Contains many functions useful for data analysis, high-level graphics, utility operations, functions for computing sample size and power, simulation, importing and annotating datasets,
+imputing missing values, advanced table making, variable clustering, character string manipulation, conversion of R objects to LaTeX and html code, and recoding variables. Used here to add standard deviation to as lines to ggplot.
+
+knitr: Provides a general-purpose tool for dynamic report generation in R using Literate Programming techniques. Used here for Markdown formatting as html or pdf.
+
+lubridate : Functions to work with date-times and time-spans: fast and user friendly parsing of date-time data, extraction and updating of components of a date-time (years, months, days, hours, minutes, and seconds), algebraic manipulation on date-time and time-span objects. Used here to pool dates to month.
+
+markdown: R Markdown allows the use of knitr and Pandoc in the R environment. This package translates R Markdown to standard Markdown that knitr and Pandoc render to the desired output format (e.g., PDF, HTML, Word, etc).
+
+purrr: A complete and consistent functional programming toolkit for data manupulation in R.  
+
+readxl: Imports excel files into R.  
+
+reshape2: Flexibly restructure and aggregate data using just two functions: melt and 'dcast'. Used here for ggplot() support. 
+
+tibble: Functions for manipulating the tibble data format in R. Used here for the deframe() function.  
+
+vegan: Ordination methods, diversity analysis and other functions for community and vegetation ecologists.  
+
+# Results
+
+## Part 1: Metrics across all prey 
+### Metrics by month
+
+
+__*Table 1a, b: Mean (mn) and standard deviations (sd) by month for forage ratio (FRATIO), prey abundance (PABUND), prey richness (RICH) and prey diversity (DINDEX) statistics for a) fry and b) smolts.*__
+```{r MetricsDataAll, warning=FALSE, message=FALSE, echo=FALSE}
+dat <- mo.stats[ mo.stats$ORIGIN==0, -c(1)]
+row.names(dat) <- NULL
+kable( dat, digits=3,
+       caption ='a) Stomach statistics for FRY.')
+
+dat <- mo.stats[ mo.stats$ORIGIN==2, -c(1)]
+row.names(dat) <- NULL
+kable( dat, digits=3,
+       caption ='b) Stomach statistics for SMOLTS.')
+
+```
+
+
+```{r MetricsByMonthCalc, warning=FALSE, message=FALSE, echo=FALSE}
+# Figure 1, a,b,c,d
+# DEPENDS ON: mo.stats in Chinook_Main.R
+
+plotGroupsByMonth( mo.stats, "mnPABUND", "sdPABUND", c("Fry", "Smolts"), "Mean prey abundance", pal.cb2)
+plotGroupsByMonth( mo.stats, "mnFRATIO", "sdFRATIO", c("Fry", "Smolts"), "Mean forage ratio", pal.cb2)
+plotGroupsByMonth( mo.stats, "mnRICH", "sdRICH", c("Fry", "Smolts"), "Mean prey richness", pal.cb2)
+plotGroupsByMonth( mo.stats, "mnDINDEX", "sdDINDEX", c("Fry", "Smolts"), "Mean prey diversity (Simpson's index)", pal.cb2)
+#plotGroupsByMonth( mo.stats, "mnFULL", "sdFULL", c("Fry", "Smolts"), "Mean stomach fullness", pal.cb2)
+
+```
+__*Figure 1 (a,b,c,d): Monthly values (mean and standard deviation) of key stomach content metrics (a=Forage ratio, b=Percent abundance, c=Prey richness, d=Prey diversity index).*__
+
+### Metrics by month across transects
+
+#### Sample size by month (rows) and transect (columns).
+```{r MetricsByMonthTransectCalc, warning=FALSE, message=FALSE, echo=FALSE, fig.width=5.5, fig.height=7, dpi=300, fig.align="center"}
+#Aggregate again - this time by ORIGIN, MONTH and TRANSECT.
+
+#dim(metrics.dat)
+#dim(clean.dat)
+foo <- cbind( metrics.dat, 'TRANSECT' = clean.dat$TRANSECT )
+table(foo$MONTH, foo$TRANSECT)
+
+mo.stats2 <- AggregateByMonthTransect( foo )
+#dim(mo.stats)
+#head(mo.stats)
+
+# Plotting ... 
+mo.stats2 <- mo.stats2[ mo.stats2$ORIGIN != 1, ]        # Drop marked smolts
+mo.stats2$TRANSECT <- factor( mo.stats2$TRANSECT,      # Reordering group factor levels
+                             levels = c("E", "D", "C", "B", "A"))
+```
+
+__*Table 2a, b: Mean (mn) and standard deviations (sd) by transects within months for forage ratio (FRATIO), prey abundance (PABUND), prey richness (RICH) and prey diversity (DINDEX) statistics for a) fry and b) smolts.*__
+```{r MetricsData, warning=FALSE, message=FALSE, echo=FALSE}
+dat <- mo.stats2[ mo.stats$ORIGIN==0, -c(1)]
+row.names(dat) <- NULL
+dat <- dat[ order( dat$MONTH ),]
+kable( dat, digits=3,
+       caption ='a) Stomach statistics for FRY by TRANSECTs within MONTHs.')
+
+dat <- mo.stats2[ mo.stats2$ORIGIN==2, -c(1)]
+row.names(dat) <- NULL
+dat <- dat[ order( dat$MONTH ),]
+kable( dat, digits=3,
+       caption ='b) Stomach statistics for SMOLTS by TRANSECTs within MONTHs.')
+
+```
+
+
+```{r MetricsByMonthTransectPlot, warning=FALSE, message=FALSE, echo=FALSE, fig.width=5.5, fig.height=7, dpi=300, fig.align="center"}
+
+plotGroupsByMonthByTransect( mo.stats2, "mnPABUND", "sdPABUND", c("Fry", "Smolts"), "Mean prey abundance", 
+                             pal.cb2, .65, .775)
+plotGroupsByMonthByTransect( mo.stats2, "mnFRATIO", "sdFRATIO", c("Fry", "Smolts"), "Mean forage ratio",
+                             pal.cb2, .65, .775)
+
+plotGroupsByMonthByTransect( mo.stats2, "mnRICH", "sdRICH", c("Fry", "Smolts"), "Mean prey richness", 
+                             pal.cb2, .55, .775)
+plotGroupsByMonthByTransect( mo.stats2, "mnDINDEX", "sdDINDEX", c("Fry", "Smolts"), "Mean prey diversity (Simpson's index)", pal.cb2, .55, .825)
+
+```
+__*Figure 2 (a,b,c,d): Monthly values (mean and standard deviation) of key stomach content metrics (a=Forage ratio, b=Percent abundance, c=Prey richness, d=Diversity index) across transects.*__
+
+## Part 2: Metrics for the 6 habitat-based prey groupings 
+```{r GroupDataPrep, warning=FALSE, message=FALSE, echo=FALSE}
+
+# June 2022: UPDATED to include the ARBO prey group.
+
+# Uses global variables top.5 and clean.dat
+prey.dat <- PrepTopSix()
+
+#-- Aggregate prey data into the grouped prey.frame 
+prey.frame <- Group.6( prey.dat )
+#names( prey.frame )
+
+# June 2022: This was not correct. This separation must also correctly group the prey. 
+# Just drop a different column from each. :)
+fry.dat   <- prey.frame[ prey.frame$ORIGIN == 0, -11] #Drop TRIC
+smolt.dat <- prey.frame[ prey.frame$ORIGIN == 2, -9]  #Drop CLAD
+
+# NOW have group-specific frames, with the common deets and specific top-10 prey groups.
+
+#---------------------------------------------------------------------------
+# For each group, add 1) prey abundance, 2) richness, and 3) diversity index
+# NOTE: Forage ratio will not change for grouped data. 
+
+#names(fry.dat)
+# Prey abundance for top 5 prey groups (summed counts)
+# Richness for 5 prey groups
+
+#separate out the data and build metrics.
+x <- fry.dat[, -c(1:4), ]
+fry.mets <- cbind( fry.dat[,2:4],
+                   'PABUND' = rowSums( x ),
+                   'RICH'   = rowSums( x != 0 ),
+                   'DINDEX' = diversity( x, index = "simpson" ))
+
+x <- smolt.dat[, -c(1:4), ]
+smolt.mets <- cbind( smolt.dat[,2:4],
+                     'PABUND' = rowSums( x ),
+                     'RICH'   = rowSums( x != 0 ),
+                     'DINDEX' = diversity( x, index = "simpson" ))
+
+# Combine groups in preparation for plotting.
+aye <- rbind( fry.mets, smolt.mets )
+#head(aye)
+
+# Aggregate forage ratio, prey abundance, prey diversity, and stomach fullness
+# across transects by month and life history stage.
+see1 <- aggregate( x = aye$PABUND, by = list(aye$ORIGIN, aye$MONTH), FUN = mean)
+see2 <- aggregate( x = aye$PABUND, by = list(aye$ORIGIN, aye$MONTH), FUN = sd)
+dee1 <- aggregate( x = aye$RICH,   by = list(aye$ORIGIN, aye$MONTH), FUN = mean)
+dee2 <- aggregate( x = aye$RICH,   by = list(aye$ORIGIN, aye$MONTH), FUN = sd)
+eee1 <- aggregate( x = aye$DINDEX, by = list(aye$ORIGIN, aye$MONTH), FUN = mean)
+eee2 <- aggregate( x = aye$DINDEX, by = list(aye$ORIGIN, aye$MONTH), FUN = sd)
+
+plot.dat <- cbind( see1, see2$x, dee1$x, dee2$x, eee1$x, eee2$x )
+names(plot.dat) <- c("ORIGIN", "MONTH","mnPABUND", "sdPABUND","mnRICH", "sdRICH", "mnDINDEX", "sdDINDEX" )
+
+### Data now prepared to both create a table and subsequent plots.
+```
+
+__*Table 3a, b: Mean (mn) and standard deviations (sd) by months for forage ratio (FRATIO), prey abundance (PABUND), prey richness (RICH) and prey diversity (DINDEX) statistics for prey grouped by habitat type for a) fry and b) smolts.*__
+```{r MetricsDataGroupsMo, warning=FALSE, message=FALSE, echo=FALSE}
+dat <- plot.dat[ plot.dat$ORIGIN==0, -c(1)]
+row.names(dat) <- NULL
+dat <- dat[ order( dat$MONTH ),]
+kable( dat, digits=3,
+       caption ='a) Stomach statistics for habitat grouping of FRY prey by MONTH.')
+
+dat <- plot.dat[ plot.dat$ORIGIN==2, -c(1)]
+row.names(dat) <- NULL
+dat <- dat[ order( dat$MONTH ),]
+kable( dat, digits=3,
+       caption ='b) Stomach statistics for habitat grouping of SMOLT prey by MONTH.')
+```
+
+
+```{r Figure_3, warning=FALSE, message=FALSE, echo=FALSE}
+
+#head(plot.dat)
+
+plotGroupsByMonth( plot.dat, "mnPABUND", "sdPABUND", c("Fry", "Smolts"), "Mean prey abundance", pal.cb2 )
+plotGroupsByMonth( plot.dat, "mnRICH",   "sdRICH",   c("Fry", "Smolts"), "Mean diet richness ", pal.cb2 )
+plotGroupsByMonth( plot.dat, "mnDINDEX", "sdDINDEX", c("Fry", "Smolts"), "Mean diversity index (Simpson's)", pal.cb2 )
+
+# FIX function ... ??
+# Not really broken. Its just geom_line() that complains there are not enough points to connect across months. 
+```
+__*Figure 3: Metrics by month for habitat prey groups.*__
+
+
+__*Table 4a, b: Mean (mn) and standard deviations (sd) by transects within months for forage ratio (FRATIO), prey abundance (PABUND), prey richness (RICH) and prey diversity (DINDEX) statistics for prey grouped by habitat type for a) fry and b) smolts.*__
+```{r MetricsDataGroupsMoandTrans, warning=FALSE, message=FALSE, echo=FALSE}
+
+# Aggregate again by ORIGIN (group), MONTH, and TRANSECT. 
+bee1 <- aggregate( x = aye$PABUND, by = list(aye$ORIGIN, aye$MONTH, aye$TRANSECT), FUN = mean)
+bee2 <- aggregate( x = aye$PABUND, by = list(aye$ORIGIN, aye$MONTH, aye$TRANSECT), FUN = sd)
+see1 <- aggregate( x = aye$RICH,   by = list(aye$ORIGIN, aye$MONTH, aye$TRANSECT), FUN = mean)
+see2 <- aggregate( x = aye$RICH,   by = list(aye$ORIGIN, aye$MONTH, aye$TRANSECT), FUN = sd)
+dee1 <- aggregate( x = aye$DINDEX, by = list(aye$ORIGIN, aye$MONTH, aye$TRANSECT), FUN = mean)
+dee2 <- aggregate( x = aye$DINDEX, by = list(aye$ORIGIN, aye$MONTH, aye$TRANSECT), FUN = sd)
+
+plot.dat <- cbind( bee1, bee2$x, see1$x, see2$x, dee1$x, dee2$x )
+names(plot.dat) <- c("ORIGIN", "MONTH","TRANSECT", "mnPABUND", "sdPABUND","mnRICH", "sdRICH", "mnDINDEX", "sdDINDEX" )
+
+dat <- plot.dat[ plot.dat$ORIGIN==0, -c(1)]
+row.names(dat) <- NULL
+dat <- dat[ order( dat$MONTH ),]
+kable( dat, digits=3,
+       caption ='a) Stomach statistics for habitat grouping of FRY prey by MONTH.')
+
+dat <- plot.dat[ plot.dat$ORIGIN==2, -c(1)]
+row.names(dat) <- NULL
+dat <- dat[ order( dat$MONTH ),]
+kable( dat, digits=3,
+       caption ='b) Stomach statistics for habitat grouping of SMOLT prey by MONTH.')
+```
+
+
+```{r Figure_4, warning=FALSE, message=FALSE, echo=FALSE, fig.width=5, fig.height=7, dpi=300, fig.align="center"}
+
+
+plotGroupsByMonthByTransect( plot.dat, "mnPABUND", "sdPABUND", c("Fry", "Smolts"), "Abundance", pal.cb2, .6, .8)
+plotGroupsByMonthByTransect( plot.dat, "mnRICH", "sdRICH", c("Fry", "Smolts"), "Richness", pal.cb2, .6, .825)
+plotGroupsByMonthByTransect( plot.dat, "mnDINDEX", "sdDINDEX", c("Fry", "Smolts"), "Diversity Index", pal.cb2, .75, .8)
+
+# May also need plotGroupsByTransectMonth() but lets cross that bridge later. 
+# Removed here on March 28th  so will be in the prevision GIT version. 
+```
+__*Figure 4: Metrics for each group by MONTH, faceted by TRANSECT.*__
+
+
+## Part 3: Violin plots for the 6 prey habitat groups.
+These plots show the distribution of prey density for each prey group (% of each in the total). The violin plots are overlain with the actual point values, randomly jittered in the horizontal. 
+
+### Fry prey
+The tables below show the number of each type of prey group, and the number of stomachs by transect and by month. 
+```{r FryPreyViolins, warning=FALSE, message=FALSE, echo=FALSE}
+prey.dat <- PrepTopSix()
+#prey.dat <- PrepTopFive()
+#names(prey.dat)
+#dim(prey.dat)
+
+#-- Function call to aggregate prey data into the grouped prey.frame 
+prey.frame <- Group.6( prey.dat )
+#prey.frame <- Group.5( prey.dat )
+#names( prey.frame )
+
+#-- Lost some stomachs ... because not all are included in prey groups, right?
+#dim( prey.frame )
+
+#----- FINAL PLOTTING PHASE ------
+
+# Select fry group, summarize data, and plot violins:
+aye <- prey.frame[ prey.frame$ORIGIN == 0, ]
+
+#-- Now pull and summarize the distribution of the FRY prey data
+colSums( aye[, 5:11 ], na.rm = TRUE)   # Total of 6 prey groups 
+summary( aye$TRANSECT )
+summary( aye$MONTH )
+
+# 2023/02/20 - Reorder transects in prey count figures ... 
+levels(aye$TRANSECT)
+aye$TRANSECT  <- factor( aye$TRANSECT,  # Reordering group factor levels
+                               levels = c("A", "B", "C", "D", "E"))
+levels(aye$TRANSECT)
+
+
+#-- Calculate and return the percent of total for FRY prey groups
+prey.pct <- Get.Percent( aye[,5:11] )
+
+# Reassemble and drop OBS, ORIGIN at the same time
+aye <- cbind( aye[,3:4], prey.pct )
+
+#-- Ready to make some plots!
+
+# Melt the 6 prey taxa into a single vector
+# June 2022: Also drop TRIC from the fry plot.  
+bee <- melt( aye[ ,-9], id.vars =c("MONTH", "TRANSECT"))
+
+Plot.Violins.Transect( bee, 'fry', 'steelblue',  pal.cb2[1])
+Plot.Violins.Month( bee, 'fry', 'steelblue',  pal.cb2[1])
+```
+__*Figure 5 a, b : Violin plots of grouped FRY prey metrics by transect and month.*__
+
+
+### Smolt prey
+The tables below show the number of each type of prey, and the number of stomachs by transect and by month. 
+```{r SmoltPreyViolins, warning=FALSE, message=FALSE, echo=FALSE}
+
+# Start with prey.frame built above. 
+# Re-do aye for SMOLTS.
+aye <- prey.frame[ prey.frame$ORIGIN == 2, ]
+
+#-- Pull and summarize the distribution of the SMOLT prey data
+colSums( aye[, 5:11 ], na.rm = TRUE)   # Total of 6 prey groups 
+summary( aye$TRANSECT )
+summary( aye$MONTH )
+
+# 2023/02/20 - Reorder transects in prey count figures ... 
+levels(aye$TRANSECT)
+aye$TRANSECT  <- factor( aye$TRANSECT,  # Reordering group factor levels
+                               levels = c("A", "B", "C", "D", "E"))
+levels(aye$TRANSECT)
+
+#-- Calculate and return the percent of total for SMOLT prey groups
+prey.pct <- Get.Percent( aye[, c(5:8,11,10)] )
+
+# Reassemble and drop OBS, ORIGIN at the same time
+aye <- cbind( aye[,3:4], prey.pct )
+
+#-- Ready to make some plots!
+
+# Melt the 6 prey taxa into a single vector
+# June 2022: Also drop CLAD from the SMOLT plot.  
+bee <- melt( aye, id.vars =c("MONTH", "TRANSECT"))
+
+
+Plot.Violins.Transect( bee, 'smolts', 'steelblue', pal.cb2[2])
+Plot.Violins.Month( bee, 'smolts', 'steelblue',  pal.cb2[2])
+```
+__*Figure 6 a, b : Violin plots of grouped SMOLT prey metrics by transect and month.*__
+
+
+## Part 4: Multivariate analysis of top 24 prey taxa
+
+Using NMDS ordination, we examined the dissimiarity of the top prey taxa in the stomachs of fry and smolts.
+
+Stomach sample size:  
+-Total stomachs initially: 518  
+-After removing empty    : 459  
+-After dropping N=1 prey : 371  
+
+```{r NMDS_DataPrep, warning=FALSE, message=FALSE, echo=FALSE, cache=TRUE}
+# Make a list of the prey taxa used ... 
+sm.list <- unlist( strsplit( top.23[ top.23$group %in% c('fry', 'smolts_unmarked'), ]$source_code, "," ))
+#table( sm.list )
+
+prey.dat <- cbind( clean.dat[ , c(1,4,6)], clean.dat[ ,names(clean.dat) %in% sm.list ] )
+
+### Create new data frame by aggregating top 20(ish) prey taxa. 
+prey.frame <- Group.23b( prey.dat )
+#dim( prey.frame )
+#names( prey.frame )
+
+# remove empty stomachs 
+#dim(prey.frame)
+prey.frame <- prey.frame[ rowSums( prey.frame[,-c(1,2,3)] ) != 0, ] 
+#dim(prey.frame)
+
+# Set minimum number of stomachs
+#dim(prey.frame)
+prey.frame <- prey.frame[ rowSums( prey.frame[,-c(1,2,3)] != 0 ) >= 2, ] 
+#dim(prey.frame)
+#names(prey.frame)
+
+rm( y, nm.scores )
+set.seed( 42 )
+
+x <- prey.frame[,-c(1,2,3)]
+x <- sqrt( x )
+
+# Small hack to suppress the run (and quicken code) if results already exist. 
+if (!exists("yMDS")) { 
+  yMDS <- metaMDS( x, distance = 'bray', k=2, trymax = 20, autotransform = FALSE, noshare = TRUE, trace = 0 )
+  #set trace=1 if you want some sense of progress. 
+}
+```
+
+__*Table 5 a, b: Percent of total for each major prey type across transects for a) Fry and b) Smolts.*__ 
+```{r NMDS_Tables, warning=FALSE, message=FALSE, echo=FALSE}
+# Aggregate the prey.frame, and then do the percentage math. 
+
+#Smolts first ... zz <- prey.frame[ prey.frame$ORIGIN == 0, ]
+zz <- prey.frame[ prey.frame$ORIGIN == 0, ]
+yy <- aggregate(zz[, -c(1,2,3)], list(zz$TRANSECT), FUN=sum)
+xx <- data.frame(t(yy[-1]))
+colnames(xx) <- yy[, 1]
+
+ww <- mapply('/', xx, colSums(xx))
+rownames(ww) <- rownames(xx)
+
+kable(ww, digits=3, format.args=list(scientific = FALSE), 
+      caption ='a) Percent of total prey composition for Fry.')
+
+#And fry ... 
+zz <- prey.frame[ prey.frame$ORIGIN == 2, ]
+yy <- aggregate(zz[, -c(1,2,3)], list(zz$TRANSECT), FUN=sum)
+xx <- data.frame(t(yy[-1]))
+colnames(xx) <- yy[, 1]
+
+ww <- mapply('/', xx, colSums(xx))
+rownames(ww) <- rownames(xx)
+
+kable (ww, digits=3, format.args=list(scientific = FALSE), 
+      caption ='b) Percent of total prey composition for Smolts.')
+```
+
+### Shepard diagram
+
+A Shepard diagram shows the fit between the actual dissimilarities measured and the resulting ordination distances and shows a line fit to the middle of the distribution. It also provides two statistics on the goodness of fit: the nonmetric fit is essentially an r-squared based on the stress, and the linear fit is the squared correlation between fitted values and ordination distances (see the Vegan package documentation for more details).
+
+```{r StressPlot, warning=FALSE, message=FALSE, echo=FALSE}
+#---------------------------------------
+#- Figure 5: Stress Plot . 
+stressplot(yMDS)
+```
+__*Fig 7. A Shepard diagram of the NMDS fit.*__
+
+#### Interpretation
+The use of the extended dissimilarities removed the problem of many 1's (dissimilarity of 0) stacking up on the Shepard diagram.
+
+### NMDS Plots
+NMDS plots are show with points coded by life stage and transect, and with environmental vectors. 
+
+```{r NMDS_Plot, warning=FALSE, message=FALSE, echo=FALSE}
+nm.scores = as.data.frame( scores( yMDS ))
+#dim( scores(yMDS) )
+nm.scores$ORIGIN <- as.factor( prey.frame$ORIGIN )
+nm.scores$TRANSECT  <- factor( prey.frame$TRANSECT,  # Reordering group factor levels
+                               levels = c("E", "D", "C", "B", "A"))
+#names(nm.scores)
+
+#---------------------------------------
+#- Figure 6: NMDS plot showing transects. 
+Plot.NMDS( nm.scores )
+
+# Prepare and combine the environmental data.
+# Select from env.frame only those obs in prey.frame
+#names( clean.dat )
+
+env.frame <- clean.dat[, c('OBS','TRANSECT','FLOW','DISCH')]
+env.frame <- cbind( env.frame, 'MONTH' = month( lubridate::floor_date(clean.dat$DATE, "month") ))
+#head(env.frame)
+
+# Limit the environmental frame to the OBS values that are in the prey.frame.  
+env.frame <- env.frame[env.frame$OBS %in% prey.frame$OBS, ]
+#dim(env.frame)
+
+# Ensure you drop OBS before analysis
+en.dat <- envfit( yMDS, env.frame[,-1], permutations = 999, na.rm = T)
+
+#-----------------------------------------------------------
+#- Figure 6 b, c: 
+# a) NMDS plot showing DISH, FLOW, and MONTH vectors. 
+# b) NMDS plot showing centroids of transects
+#   (like Fig. 6) but with transect centroids. 
+
+Plot.EnvNMDS2( nm.scores, en.dat )
+Plot.EnvNMDS( nm.scores, en.dat )
+
+```
+__*Fig 8 a,b,c: NMDS Plot showing stomach prey groupings (Simpson's dissimilarity index) a) coded for life history and transects, b) same as (a) but showing transect centroids, and c) coded for life history showing environmental vectors. The stress of the NMDS analysis is 0.24.*__
+
+#### Influence of environmental variables
+```{r NMDS_EnvResults, warning=FALSE, message=FALSE, echo=FALSE}
+
+en.dat$vectors
+
+en.dat$factors
+```
+
+#### Interpretation
+Discharge seems most closely related to the separation between smolt and fry and is partially correlated with Flow. Month, while also somewhat correlated, also appears to be separating the data in a different direction. There is a clear, but unidentified clustering orthogonal to Flow for which we have no explanation. 
+
+The lack of separation by transects may be due to the dominant effect of these environmental drivers. This could be explored by looking within a month where the effect of the environmental drivers would be less pronounced (assuming there is enough data).
+
