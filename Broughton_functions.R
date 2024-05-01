@@ -43,23 +43,53 @@ spat_ref <- '+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 
 z_breaks <- c( -1000, 0, 5, 10, 20, 50, 100, 200, 5000)
 z_ribs   <- c('ITD', '0-5', '5-10', '10-20', '20-50', '50-100', '100-200', '200+')
 
-# Seed for reproducibility
-set.seed <- 42
-
-# Define color palettes
-pal_heat <- rev( brewer.pal(n = k, name = "RdYlBu")) # heat map palette
-
-
 
 #===================================== Functions =========================================
 
 
-#----------------------------------------------------------------------------
-# Loads predictors from specified subdirectory 
-Load.Predictors <- function( pred.dir ) {
+#---- MakeScreePlot: retuns a ggplot. ----
+# samp is optional, uses all dat if omitted.
+MakeScreePlot <- function( indat, nclust, sampsize = 0 ){
+  #initialize list for results
+  wss <- numeric(nclust) 
+  
+  #subsample as requested
+  if (sampsize > 0) {
+    samp <- sample( 1:length( indat[ , 1] ), sampsize )
+    dat <- indat[ samp, ]
+  } else dat <- indat
+  
+  for (i in 1:nclust) {
+    # Fit the model: km.out
+    print( paste0( "iteration ",i))
+    km.out <- kmeans(dat, centers = i, nstart = 20)
+    # Save the within cluster sum of squares
+    wss[i] <- km.out$tot.withinss
+    
+    # calculate the silhouete width
+  }
+  
+  # Produce the scree plot ... using a tibble, I guess. 
+  wss_df <- tibble(clusters = 1:nclust, wss = wss)
+  scree_plot <- ggplot(wss_df, aes(x = clusters, y = wss, group = 1)) +
+    geom_point(size = 4)+
+    geom_line() +
+    scale_x_continuous(breaks = c(2, 4, 6, 8, 10, 12)) +
+    xlab('Number of clusters') +
+    ylab('Total within-cluster sum of squares') +
+    geom_hline(
+      yintercept = wss, 
+      linetype = 'dashed')
+  
+  return( scree_plot)
+}
+
+
+#---- Loads predictors from specified subdirectory -----
+LoadPredictors <- function( pred_dir ) {
   
   # make a list of predictor rasters
-  raster.list <- list.files(path = pred.dir, pattern = '\\.tif$', full.names = TRUE)
+  raster.list <- list.files(path = pred_dir, pattern = '\\.tif$', full.names = TRUE)
   
   # make list of raster names (without extension)
   raster.names <- lapply(raster.list, FUN = function(raster.layer){
@@ -71,7 +101,7 @@ Load.Predictors <- function( pred.dir ) {
   return(raster.stack)
 }
 
-# Returns a stack of integerized rasters from a raster stack
+#---- Returns a stack of integerized rasters from a raster stack ----
 Integerize <- function( in_layers, sig = 1000 ) {
   int_layers <- brick()
   for (i in 1:nlayers(in_layers)) {
