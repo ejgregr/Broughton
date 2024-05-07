@@ -32,9 +32,10 @@ lapply(required.packages, require, character.only = TRUE)
 
 #-- Set source and output directories. Directory will be created if doesn't exist; file will be overwritten if it does.
 #raster.dir  <- 'C:/Data/SpaceData/Substrate2019/Predictors/QCS'
-raster_dir  <- 'C:/Data/Git/Broughton/Data/Predictors'
-data_dir    <- 'C:/Data/Git/Broughton/Data'
-  
+raster_dir <- 'C:/Data/Git/Broughton/Data/Predictors'
+data_dir   <- 'C:/Data/Git/Broughton/Data'
+rmd_dir    <- 'C:/Data/Git/Broughton' 
+
 # proj4 string for albers projection with NAD83 datum
 spat_ref <- '+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0'
 
@@ -49,7 +50,7 @@ z_ribs   <- c('ITD', '0-5', '5-10', '10-20', '20-50', '50-100', '100-200', '200+
 
 #---- MakeScreePlot: retuns a ggplot. ----
 # samp is optional, uses all dat if omitted.
-MakeScreePlot <- function( indat, nclust, sampsize = 0 ){
+MakeScreePlot <- function( indat, nclust, nrand, maxi, sampsize = 0 ){
   #initialize list for results
   wss <- numeric(nclust) 
   
@@ -61,8 +62,8 @@ MakeScreePlot <- function( indat, nclust, sampsize = 0 ){
   
   for (i in 1:nclust) {
     # Fit the model: km.out
-    print( paste0( "iteration ",i))
-    km.out <- kmeans(dat, centers = i, nstart = 20)
+    print( paste0( "centers ",i))
+    km.out <- kmeans(dat, centers = i, nstart = nrand, iter.max = maxi)
     # Save the within cluster sum of squares
     wss[i] <- km.out$tot.withinss
     
@@ -100,6 +101,61 @@ LoadPredictors <- function( pred_dir ) {
   raster.stack <- raster::stack(x = raster.list)
   return(raster.stack)
 }
+
+
+#---- The full set of load, trim, and scale operations. ----
+# Creates global raster stack for analysis. 
+prepareData <- function( loaddat, trimdat ) {
+  # Load data ... 
+  if (loaddat == T){
+    
+    print( "Loading predictors ... ")
+    print( list.files(path = raster_dir, pattern = '\\.tif$', full.names = FALSE) )
+    
+    data_layers <- LoadPredictors( raster_dir )
+    print( "Data loaded ... ")
+    
+    today <- format(Sys.Date(), "%Y-%m-%d")
+    save( data_layers, file = paste0( data_dir, '/source_rasters_', today, '.rData' ))
+    print( "Data saved ... ")
+    
+  } else {
+    load( paste0( data_dir, '/source_rasters_2024-05-01.rData' ))}
+  
+  # Trim the land part away. Mainly for subsequent display of clusters as
+  # clustering can remove its own NAs ... 
+  
+  if (trimdat == T){
+    # Removing all data above the HHWL, assumed to be 5 m.
+    # This is to avoid spurious outliers, and for visuallzation.
+    trim_layers <- data_layers
+    trim_data <- getValues( trim_layers$bathymetry )
+    trim_idx <- trim_data < -5
+    trim_data[ trim_idx ] <- NA
+    trim_layers$bathymetry <- setValues( trim_layers$bathymetry, as.integer( trim_data ))
+    trim_layers$bathymetry <- setMinMax( trim_layers$bathymetry )
+    
+    trim_data <- getValues( trim_layers$rugosity )
+    trim_data[ trim_idx ] <- NA
+    trim_layers$rugosity <- setValues( trim_layers$rugosity, trim_data )
+    trim_layers$rugosity <- setMinMax( trim_layers$rugosity )
+    
+    trim_data <- getValues( trim_layers$standard_deviation_slope )
+    trim_data[ trim_idx ] <- NA
+    trim_layers$standard_deviation_slope <- setValues( trim_layers$standard_deviation_slope, trim_data )
+    trim_layers$standard_deviation_slope <- setMinMax( trim_layers$standard_deviation_slope )
+    print( "Data trimmed ... ")
+    
+    today <- format(Sys.Date(), "%Y-%m-%d")
+    save( trim_layers, file = paste0( data_dir, '/trimmed_rasters_', today, '.rData' ))
+    
+  } else {
+      print('Loading trimmed data ...')
+      load( paste0( data_dir, '/trimmed_rasters_2024-05-01.rData' ))
+      return( trimmed_layers )
+ }  
+}
+
 
 #---- Returns a stack of integerized rasters from a raster stack ----
 Integerize <- function( in_layers, sig = 1000 ) {

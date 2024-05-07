@@ -9,9 +9,10 @@
 #
 #
 # Updates: 
-# 2024/04/29: Steady development has led to all the pieces being largely developed. 
-# 2024/04/29: Git repo created (after some effort) prior to RMarkdown development.
-
+# 2024/04/29: Steady development past few weeks; alll necessary pieces now developed. 
+# 2024/04/29: Git repo created and working version pushed prior to RMarkdown development.
+# 2024/05/02: Completed smoothing pass thru code; sorted raster plotting. Pushed.
+# 2024/05/06: 
 #################################################################################
 
 print('Starting Broughton ...')
@@ -21,210 +22,142 @@ rm(list=ls(all=T))  # Erase environment.
 source( "broughton_functions.R" )
 # source( "Plot_Functions.R" )
 
-#----------------------------
-### Process file 
-# To HTML ... 
-rmarkdown::render( "Broughton.Rmd",   
-                   output_format = 'html_document',
-                   output_dir = results.dir )  
-
-# 2024/04/29: It looks like this has gotten easier in the last 2 years ... version up!
-
-# To PDF:
-# First had to install the library tinytex.
-# then run >tinytex::install_tinytex()
-# ... and done. 
-rmarkdown::render( "Broughton.Rmd",   
-                   output_format = 'pdf_document',
-                   output_dir = results.dir )  
-#-------------------------------------------------
-
-
-#---- Part 1 of 5: Load and prepare rasters for classification ----
-
 # Processing FLAGS. When set to true, the data structure will be re-built from imported data. 
 # Otherwise, it will be loaded from rData. Watch for dependencies.
 
-loadtifs  <- T
-scaleData <- T
-trimland  <- T
-# trimLand  <- F ## Not sure we need this ...
-
-  # Load data ... 
-if (loadtifs == T){
-
-  print( "Loading predictors ... ")
-  print( list.files(path = raster_dir, pattern = '\\.tif$', full.names = FALSE) )
-  
-  data_layers <- LoadPredictors( raster_dir )
-  print( "Data loaded ... ")
-  
-  today <- format(Sys.Date(), "%Y-%m-%d")
-  save( data_layers, file = paste0( data_dir, '/source_rasters_', today, '.rData' ))
-  print( "Data saved ... ")
-  
-} else {
-    load( paste0( data_dir, '/source_rasters_2024-05-01.rData' ))}
+loadtifs <- F
+trimland <- F # relevant only to depth-derived layers contain terrestrial elevations 
+scaledat <- F # only needed if new layers loaded 
+spacesub <- F # True if a spatial subset of the data is desired. Requires a polygon shape file. 
 
 
-# Trim the land part away. Seems desirable for most applications ... 
-# BUT WHY?? Can't be for the clustering cuz that removes NAs ... 
-# THINK!!
+#---- Part 1 of 8: Load, clean, and display rasters for processing  ----
+if (loadtifs & trimland & scaledat){
 
-names(data_layers)
-
-if (trimland == T){
- # Removing all data above the HHWL, assumed to be 5 m.
- # This is to avoid spurious outliers, and for visuallzation.
-  trim_layers <- data_layers
-  trim_data <- getValues( trim_layers$bathymetry )
-  trim_idx <- trim_data < -5
-  trim_data[ trim_idx ] <- NA
-  trim_layers$bathymetry <- setValues( trim_layers$bathymetry, as.integer( trim_data ))
-  trim_layers$bathymetry <- setMinMax( trim_layers$bathymetry )
-
-  trim_data <- getValues( trim_layers$rugosity )
-  trim_data[ trim_idx ] <- NA
-  trim_layers$rugosity <- setValues( trim_layers$rugosity, trim_data )
-  trim_layers$rugosity <- setMinMax( trim_layers$rugosity )
-
-  trim_data <- getValues( trim_layers$standard_deviation_slope )
-  trim_data[ trim_idx ] <- NA
-  trim_layers$standard_deviation_slope <- setValues( trim_layers$standard_deviation_slope, trim_data )
-  trim_layers$standard_deviation_slope <- setMinMax( trim_layers$standard_deviation_slope )
-  print( "Data trimmed ... ")
-
-  today <- format(Sys.Date(), "%Y-%m-%d")
-  save( trim_layers, file = paste0( data_dir, '/trimmed_rasters_', today, '.rData' ))
-  print( "Data saved ... ")
-} else {
-    load( paste0( data_dir, '/trimmed_rasters_2024-05-01.rData' ))}
+  # Create or load a trimmed (or not) rasterStack of the data stored in the TIF source directory (data_dir). 
+  in_layers <- prepareData( loadtifs, trimland )
 
   # Now scale the data for analysis and save.
-if (scaleData == T){
-  print('scaling ...')
-
-  # A little shimmy to avoid scaling substrate and name it consistently
-  scaled_layers <- scale( dropLayer( trim_layers, "SUBSTRATE") )
-  scaled_layers <- stack( scaled_layers, trim_layers$SUBSTRATE )
-  # safe to assume its the last layer in the stack
-  names( scaled_layers[[ dim(scaled_layers)[[3]] ]] ) <- "substrate"
-  
-  print('saving ...')
-  today <- format(Sys.Date(), "%Y-%m-%d")
-  save( scaled_layers, file = paste0( data_dir, '/scaled_rasters_', today, '.rData' ))
-
+  if (scaledat){
+    print('scaling ...')
+      
+    # A little shimmy to avoid scaling substrate and name it consistently
+    scaled_layers <- scale( dropLayer( trim_layers, "SUBSTRATE") )
+    scaled_layers <- stack( scaled_layers, trim_layers$SUBSTRATE )
+    # safe to assume its the last layer in the stack
+    names( scaled_layers[[ dim(scaled_layers)[[3]] ]] ) <- "substrate"
+    
+    print('saving ...')
+    today <- format(Sys.Date(), "%Y-%m-%d")
+    save( scaled_layers, file = paste0( data_dir, '/scaled_rasters_', today, '.rData' ))
+  }
 } else {
+  print('Loading scaled data ...')
   load( paste0( data_dir, '/scaled_rasters_2024-05-01.rData' )) }
 
-# Intergerize scaled data to see if performance improves ... 
-# Also turns the scaled brick back into a RasterStack.
-scaled_ilayers <- Integerize( scaled_layers )
+# Intergerize scaled data to reduce data size and improve performance. 
+prepped_layers <- Integerize( scaled_layers )
 
-# Data inspection - NB can't plot a RasterBrick, apparently
+dim(prepped_layers)
+names(prepped_layers)
 
-plot( data_layers )
-raster::hist(data_layers, nclass=50)
-
-plot( scaled_ilayers )
-raster::hist(scaled_ilayers, nclass=50)
+plot( prepped_layers )
+raster::hist(prepped_layers, nclass=50)
 par(mfrow = c(1, 1))
 
-# Remove precursor layers cuz memory ... 
-rm( 'data_layers', 'scaled_layers' )
+# Remove precursor layer(s) cuz memory ... 
+rm( 'scaled_layers' )
 
 # Quick correlation across data layers
-x <- getValues( scaled_ilayers )
+x <- getValues( prepped_layers )
 x_clean <- x[ complete.cases(x), ]
 y <- cor( x_clean )
 y
 
-#-- Correlation across UN-scaled data layers ... 
-# foo <- getValues( scaled_layers )
-# foo_clean <- na.omit(stack_data)
-# pick <- sample( 1:length( foo_clean[ , 1] ), 10000 )
-# plot( foo_clean[ pick,'rugosity'] ~ foo_clean[ pick,'standard_deviation_slope'] )
+# Remove highly correlated layers.
+  # Drop rugosity for now ... 
+prepped_layers <- dropLayer( prepped_layers, "rugosity" )
+names( prepped_layers )
 
-# RUGOSITY is a bit of a problem distribution
-#cellStats( data_layers$rugosity, stat="range" )
-#raster::hist(log( data_layers$rugosity+10 ), nclass=50)
-# Look at bottom roughness relationships  
-#pick <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
-#plot( stack_data_clean[ pick,'rugosity'] ~ stack_data_clean[ pick,'standard_deviation_slope'] )
+#---- Part 2 of 8: Final data preparation ----
 
+if (spacesub) {
 
-#---- Final data prep ----
+  sMask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
+  smMask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
 
-# Part A - Spatial subsetting
+  # Data extents No mask and polygons
+  x  <- prepped_layers
+  
+  # Use only one of the loaded shapefiles
+  x  <- raster::mask(x, sMask )
+  # x  <- raster::mask(x, smMask )
+  
+  # Plot first layer in the resulting stack for inspection
+  plot(trim(x[[1]]), main = 'Local')
+  
+  # Plot masks over raster. NB: will only see if raster extends beyond the masks. 
+  sp::plot( sMask, border = "darkgreen", lwd = 2, add=TRUE)
+  sp::plot( smMask, border = "red", lwd = 2, add=TRUE)
 
-sMask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
-smMask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
-#aMask   <- boundaries[[1]]
-str(sMask)
+  prepped_layers <- x
+  rm('x')
+}
 
-# Data extents No mask and polygons
-x  <- scaled_ilayers
-#Regional
-x  <- raster::mask(scaled_ilayers, sMask )
-# Local
-x  <- raster::mask(scaled_ilayers, smMask )
-
-# currently only plots bathy, i.e., layer 1
-plot(trim(x[[1]]), main = 'Local')
-sp::plot( sMask, border = "darkgreen", lwd = 2, add=TRUE)
-sp::plot( smMask, border = "red", lwd = 2, add=TRUE)
-
-
-# Part A - Final data adjustments 
-
-# Select StdDevSlope  over Rugosity for now ... 
-layers_to_use <- c("bathymetry", "fetch", "standard_deviation_slope", "tidal", "substrate")
-#layers_to_use <- c("bathymetry", "fetch", "rugosity", "tidal")
-x  <- subset(x, layers_to_use )
-names(x)
+# Final data adjustments 
 
 # Extract the data for the cluster analyses
-stack_data <- getValues( x )
+stack_data <- getValues( prepped_layers )
 
 # remove any rows with an NA
+# NB: This decouples the data from the RasterStack and 
+#   needs to be put back together for some analyses below.
 clean_idx <- complete.cases(stack_data)
 stack_data_clean <- stack_data[ clean_idx, ]
 
+dim( stack_data )
+dim( stack_data_clean )
 
-#---- Part 2 of 5: Explore number of clusters using Within sum of squares plot ----
+#---- Part 3 of 8: Explore number of clusters using Within-sum-of-squares plot ----
 # Run multiple times with different number of clusters
 # Initialize total within sum of squares errors: wss
 
 set.seed <- 42 # Seed for reproducibility
+randomz  <- 20 # the number of randomizations for kmeans to do.
+imax     <- 25 # maximum iterations to try for convergence
 nclust   <- 18 # number of clusters for scree plot
 
 # Needs a subsample to run reasonably. Running all data is minutes per iteration ... 
 #*** Deal with the warnings from kmeans
-plotme <- MakeScreePlot ( stack_data_clean, nclust, 10000 )
+plotme <- MakeScreePlot( stack_data_clean, nclust, randomz, imax, 25000 )
 plotme
 
 
-#---- Part 3 of 5: Create and examine the clusters. ----
-nclust <- 8 # the number of clusters baed on Part 2, above.
-radomz <- 5 # the number of randomizations for kmeans to do.
+#---- Part 4 of 8: Create and examine the clusters. ----
+nclust <- 10 # the number of clusters based on Part 2, above.
 
-# Perform k-means clustering.
+# Perform k-means clustering. 500k good for exploration. 
+# The full data set takes a few minutes with above randomz. 
 sidx <- sample( 1:length( stack_data_clean[ , 1] ), 500000 )
 samp <- stack_data_clean[ sidx, ]
-cluster_result <- kmeans(samp, centers = nclust, nstart = radomz) # less than 10 seconds
+cluster_result <- kmeans(samp, centers=nclust, nstart=randomz, iter.max=imax) 
 
-#names(cluster_result)
+# Summary of centres and relationship to predictors 
 cluster_result$centers
-format(cluster_result$tot.withinss, scientific = TRUE)
+x <- as.data.frame( cluster_result$centers )
+for (i in names(x)){
+  print( paste0( i, ":  ", round( range(x[i])[1], 2), " to ", round( range(x[i])[2], 2 ),
+                "   Extent = ", round( abs( range(x[i])[1] - range(x[i])[2]), 2 )
+        ))
+}
 
 # Expose and examine the cluster results
 # NB: there are ~103M raster cells in the Broughton region. 
 length( cluster_result$cluster )
-range( cluster_result$cluster )
 
-#---- Look at the Silhouette plot of a specified cluster result
-# For this we need the data sample, and the corresponding assigned cluster
-# Need to subsample cuz distance matrix take long time.
+#---- Part 5 of 8: Examine silhouette plot of the current cluster result ----
+# Requires the data (i.e., cell attributes) and the corresponding assigned cluster
+# Need to subsample from the cluster result above as distance matrix take long time.
 
 # Calculating dissimilarity matrix (dist() below) takes a long time ... 
 # 100000 way to much ... took 30ish min. 50k is ~1 min to completion. 
@@ -237,10 +170,10 @@ c_dist <- dist(ss)
 sk <- silhouette(cs, c_dist) #also timeconsuming ... 
 
 #plot(sk, border=NA )
-plot(sk, col = 1:8, border=NA )
+par(mfrow = c(1, 1))
+plot(sk, col = 1:nclust, border=NA )
 
-
-#----  Cluster profiling ----
+#---- Part 6 of 8: Heat map of within-cluster standard deviations ----
 
 # Define color palette
 pal_heat <- rev( brewer.pal(n = nclust, name = "RdYlBu")) # heat map palette
@@ -250,10 +183,10 @@ sidx <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
 samp <- stack_data_clean[ sidx, ]
 # re-run cluster for smaller sample.
 cluster_result <- kmeans(samp, centers = nclust, nstart = radomz) # less than 10 seconds
+csamp <- cluster_result$cluster
 
 # Put the pieces together for the PCA by combining the data and the cluster. 
 # Put cluster # first so easy to find for PCA below
-csamp <- cluster_result$cluster
 profile_data <- as.data.frame( cbind(cluster = csamp, samp ) )
 
 dim( profile_data )
@@ -277,9 +210,8 @@ z <- ggplot(xm, aes(x=cluster, y=variable, fill=value) ) +
 z
 
 
-#---- Show cluster groupings ----
-# Dimension reduction using PCA
-# NB: This takes some time on the full data set. 
+#---- Part 7 of 8: Show cluster groupings using PCA ----
+# NB: This takes some time on the full data set. Uses profile_data from Part 5.
 # Use profile data created from samples above. 
 
 res.pca <- prcomp(profile_data[,-1],  scale = TRUE)
@@ -315,30 +247,56 @@ ggscatter(
   stat_mean(aes(color = cluster), size = 4)
 
 
+#---- Part 8 of 8: Spatialize the cluster results ----
+# NB: Here have the option to re-cluster the entire data set for mapping.
+#   Uses iter.max and nstart from above.
 
-#---- Spatialize the cluster results ----
+allDat <- F
+
+if (allDat) {
 # Prepare a zeroed raster for the cluster assignment
-cluster_raster <- scaled_ilayers$bathymetry
-dataType(cluster_raster) <- "INT1U"
-cluster_raster[] <- NA
+  cluster_raster <- prepped_layers$bathymetry
+  dataType(cluster_raster) <- "INT1U"
+  cluster_raster[] <- NA
+  
+  # Cluster the entire data set for mapping ... 
+    # less than 1 min with iter.max = 20, nstart = 20 for smallest region
+  cluster_result <- kmeans(stack_data_clean, centers = nclust, nstart = randomz, iter.max = imax)
+  
+  # Assign the clustered values ... 
+  cluster_raster[ complete.cases( stack_data ), ] <- cluster_result$cluster
+  raster::hist(cluster_result$cluster)
+} else {
+  
+  cluster_raster <- prepped_layers$bathymetry
+  dataType(cluster_raster) <- "INT1U"
+  cluster_raster[] <- NA
+  
+  # Assign the clustered values ... 
+  cluster_raster[ complete.cases( stack_data ), ] <- cluster_result$cluster
+  #raster::hist(cluster_result$cluster)
+  
+}
+# Define color palette
+pal_clust <- brewer.pal(n = nclust, "Accent")
 
-# Assign the clustered values ... 
-cluster_raster[ complete.cases( stack_data ), ] <- cluster_result$cluster
-#raster::hist(cluster_result$cluster)
+# trim and check the raster before plotting
+a <- trim(cluster_raster)
+unique( values( a$bathymetry ))
 
-### 2024/04/02: Pretty sure I have a good cluster raster at this point. 
+# plot( a , col = pal_clust,
+#      main = "K-means Clustering Result" )
 
-#---- Unsatisfying original rasterVis plots ----
+ckey <- list( at=0:nclust, 
+              title="Clusters", 
+              col = pal_clust)
+myTheme <- rasterTheme( region = pal_clust )
+levelplot( a, margin = F, 
+           colorkey = ckey,
+           par.settings = myTheme,
+           main = "K-means Clustering Result - Local extents" )
 
-plot(cluster_raster,
-     main = "K-means Clustering Result" )
-
-rasterVis::levelplot(cluster_raster,
-                     main = "K-means Clustering Result" )
-
-
-
-
+#---- ----
 #---- Outlier Detection ----
 # Work with the full data set. 
 cluster_result$centers
@@ -387,7 +345,44 @@ points(stack_data_clean[ outlier_idx, p_axes ], pch="+", col=4, cex=3)
 
 
 
+#---- Knit and render Markdown file -----
+### Process file 
+# To HTML ... 
+rmarkdown::render( "Broughton.Rmd",   
+                   output_format = 'html_document',
+                   output_dir = rmd_dir )  
+
+# 2024/04/29: It looks like this has gotten easier in the last 2 years ... version up!
+
+# To PDF:
+# First had to install the library tinytex.
+# then run >tinytex::install_tinytex()
+# ... and done. 
+rmarkdown::render( "Broughton.Rmd",   
+                   output_format = 'pdf_document',
+                   output_dir = rmd_dir )  
+
+
+#---- Some details on correlation analysis ... ----
+#-- Correlation across UN-scaled data layers ... 
+# foo <- getValues( scaled_layers )
+# foo_clean <- na.omit(stack_data)
+# pick <- sample( 1:length( foo_clean[ , 1] ), 10000 )
+# plot( foo_clean[ pick,'rugosity'] ~ foo_clean[ pick,'standard_deviation_slope'] )
+
+# RUGOSITY is a bit of a problem distribution
+#cellStats( data_layers$rugosity, stat="range" )
+#raster::hist(log( data_layers$rugosity+10 ), nclass=50)
+# Look at bottom roughness relationships  
+#pick <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
+#plot( stack_data_clean[ pick,'rugosity'] ~ stack_data_clean[ pick,'standard_deviation_slope'] )
+
+#---- ----
 
 # FIN.
+
+
+
+
 
 
