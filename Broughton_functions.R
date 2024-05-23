@@ -32,7 +32,8 @@ lapply(required.packages, require, character.only = TRUE)
 
 #-- Set source and output directories. Directory will be created if doesn't exist; file will be overwritten if it does.
 #raster.dir  <- 'C:/Data/SpaceData/Substrate2019/Predictors/QCS'
-raster_dir <- 'C:/Data/Git/Broughton/Data/Predictors'
+raster_dir <- 'C:/Data/Git/Broughton/Data/OceanOnly'
+#raster_dir <- 'C:/Data/Git/Broughton/Data/Predictors'
 data_dir   <- 'C:/Data/Git/Broughton/Data'
 rmd_dir    <- 'C:/Data/Git/Broughton' 
 

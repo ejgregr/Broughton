@@ -12,7 +12,11 @@
 # 2024/04/29: Steady development past few weeks; alll necessary pieces now developed. 
 # 2024/04/29: Git repo created and working version pushed prior to RMarkdown development.
 # 2024/05/02: Completed smoothing pass thru code; sorted raster plotting. Pushed.
-# 2024/05/06: 
+# 2024/05/07: Another pass thru, adding some controls. Ready for RMD work.Pushed.
+
+# TO DO: 
+#  Design RMD report
+#  Add config section to allow an RMD report to be built for selected extents.
 #################################################################################
 
 print('Starting Broughton ...')
@@ -25,8 +29,8 @@ source( "broughton_functions.R" )
 # Processing FLAGS. When set to true, the data structure will be re-built from imported data. 
 # Otherwise, it will be loaded from rData. Watch for dependencies.
 
-loadtifs <- F
-trimland <- F # relevant only to depth-derived layers contain terrestrial elevations 
+loadtifs <- T
+trimland <- T # relevant only to depth-derived layers contain terrestrial elevations 
 scaledat <- F # only needed if new layers loaded 
 spacesub <- F # True if a spatial subset of the data is desired. Requires a polygon shape file. 
 
