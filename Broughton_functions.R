@@ -49,6 +49,14 @@ z_ribs   <- c('ITD', '0-5', '5-10', '10-20', '20-50', '50-100', '100-200', '200+
 #===================================== Functions =========================================
 
 
+#---- The full set of load, trim, and scale operations. ----
+# Creates global raster stack for analysis. 
+prepareData <- function() {
+  
+
+}
+  
+
 #---- MakeScreePlot: retuns a ggplot. ----
 # samp is optional, uses all dat if omitted.
 MakeScreePlot <- function( indat, nclust, nrand, maxi, sampsize = 0 ){
@@ -90,8 +98,11 @@ MakeScreePlot <- function( indat, nclust, nrand, maxi, sampsize = 0 ){
 #---- Loads predictors from specified subdirectory -----
 LoadPredictors <- function( pred_dir ) {
   
+  print( list.files(path = pred_dir, pattern = '\\.tif$', full.names = FALSE) )
+
   # make a list of predictor rasters
   raster.list <- list.files(path = pred_dir, pattern = '\\.tif$', full.names = TRUE)
+  
   
   # make list of raster names (without extension)
   raster.names <- lapply(raster.list, FUN = function(raster.layer){
@@ -104,24 +115,23 @@ LoadPredictors <- function( pred_dir ) {
 }
 
 
-#---- The full set of load, trim, and scale operations. ----
-# Creates global raster stack for analysis. 
-prepareData <- function( loaddat, trimdat ) {
-  # Load data ... 
-  if (loaddat == T){
-    
-    print( "Loading predictors ... ")
-    print( list.files(path = raster_dir, pattern = '\\.tif$', full.names = FALSE) )
-    
-    data_layers <- LoadPredictors( raster_dir )
-    print( "Data loaded ... ")
-    
-    today <- format(Sys.Date(), "%Y-%m-%d")
-    save( data_layers, file = paste0( data_dir, '/source_rasters_', today, '.rData' ))
-    print( "Data saved ... ")
-    
-  } else {
-    load( paste0( data_dir, '/source_rasters_2024-05-01.rData' ))}
+ScalePredictors <- function( the_stack ){
+# A little shimmy to avoid scaling substrate and name it consistently
+#  scaled_stack <- scale( dropLayer( the_stack, "SUBSTRATE") )
+#  scaled_stack <- stack( scaled_stack, trim_layers$SUBSTRATE )
+# safe to assume its the last layer in the stack
+#  names( scaled_stack[[ dim(scaled_stack)[[3]] ]] ) <- "substrate"
+  
+  x <- scale( the_stack )
+  print('saving ...')
+  today <- format(Sys.Date(), "%Y-%m-%d")
+  save( x, file = paste0( data_dir, '/scaled_rasters_', today, '.rData' ))
+  
+  return (x)
+} 
+
+
+trimPredictors <- function( data_layers, in_mask ){
   
   # Trim the land part away. Mainly for subsequent display of clusters as
   # clustering can remove its own NAs ... 

@@ -29,10 +29,9 @@ source( "broughton_functions.R" )
 # Processing FLAGS. When set to true, the data structure will be re-built from imported data. 
 # Otherwise, it will be loaded from rData. Watch for dependencies.
 
-loadtifs <- T
-trimdata <- F # relevant only to depth-derived layers contain terrestrial elevations 
-scaledat <- F # only needed if new layers loaded 
-spacesub <- F # True if a spatial subset of the data is desired. Requires a polygon shape file. 
+loadtifs <- F
+clipdata <- T # True if a spatial subset of the data is desired. Requires a polygon shape file. 
+scaledat <- T # only needed if new layers loaded 
 
 
 #---- Part 1 of 8: Load, clean, and display rasters for processing  ----
@@ -44,35 +43,51 @@ dat_brick <- brick()
 if (loadtifs) {
   print( "Loading predictors ... ")
   tif_stack <- LoadPredictors( raster_dir )
-  print( "Data loaded ... ")
-    
+
   today <- format(Sys.Date(), "%Y-%m-%d")
   save( tif_stack, file = paste0( data_dir, '/source_rasters_', today, '.rData' ))
-  print( "Data saved ... ")
+  print( "Data saved. ")
+
+  dat_brick <- tif_stack
   
-  tmp_stack <- tif_stack
-
-  if (trimdata){
-    print( "Trimming TIFs ... ")
-    tmp_stack <- TrimPredictors( tif_stack, mask )
+  if (clipdata) {
+#    maskme <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
+    maskme <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
+    tmp_stack <-  ClipPredictors( tif_stack, maskme )
+    dat_brick <- tmp_stack
+  } else {
+    dat_brick <- tif_stack
   }
-  dat_brick <- tmp_stack
-
+  
   if (scaledat){
     print( "Scaling TIFs ... ")
-    dat_brick <- ScalePredictors( tmp_stack )
+    tmp_stack <- ScalePredictors( dat_brick )
+    dat_brick <- tmp_stack
   }
-} else {
+
+  } else {
   print( 'Loading project data ... ')
-  load( paste0( tif_stack, '/source_tifs_2024-05-01.rData' ))
-  load( paste0( dat_brick, '/data_brick_2024-05-01.rData' ))
+  load( paste0( data_dir, '/source_rasters_2024-05-27.rData' ))
 }
  
 # TIF and DAT stacks created.
 
+### NOTE: All layers in the brick have the same geometry!
+### NOTE: There is an interaction here with scaling. Perhaps integerization should be first?
+
+names(tif_stack)
+names(dat_brick)
+
 
 # Intergerize scaled data to reduce data size and improve performance. 
 prepped_layers <- Integerize( dat_brick )
+save_brick <- brick( prepped_layers )
+today <- format(Sys.Date(), "%Y-%m-%d")
+save( save_brick, file = paste0( data_dir, '/prepped_brick_MSEA_QCS', today, '.rData' ))
+
+
+prepped_layers <- stack( save_brick )
+
 
 dim(prepped_layers)
 names(prepped_layers)
@@ -80,9 +95,6 @@ names(prepped_layers)
 plot( prepped_layers )
 raster::hist(prepped_layers, nclass=50)
 par(mfrow = c(1, 1))
-
-# Remove precursor layer(s) cuz memory ... 
-rm( 'scaled_layers' )
 
 # Quick correlation across data layers
 x <- getValues( prepped_layers )
@@ -92,47 +104,45 @@ y
 
 # Remove highly correlated layers.
   # Drop rugosity for now ... 
-prepped_layers <- dropLayer( prepped_layers, "rugosity" )
-names( prepped_layers )
+prepped_layers <- dropLayer( prepped_layers, c("rugosity" ))
+
+prepped_layers <- dropLayer( prepped_layers, c("julBSpd_ave", "julBT_ave", "julSS_ave",
+                        "julSS_min", "julSSpd_ave", "julST_ave", "julST_max", "northness", "tidal_cur") ) 
+
+# All prepped_layers have same length of values 
+
 
 #---- Part 2 of 8: Final data preparation ----
 
-if (spacesub) {
-
-  sMask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
-  smMask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
-
-  # Data extents No mask and polygons
-  x  <- prepped_layers
-  
-  # Use only one of the loaded shapefiles
-  x  <- raster::mask(x, sMask )
-  # x  <- raster::mask(x, smMask )
-  
-  # Plot first layer in the resulting stack for inspection
-  plot(trim(x[[1]]), main = 'Local')
-  
-  # Plot masks over raster. NB: will only see if raster extends beyond the masks. 
-  sp::plot( sMask, border = "darkgreen", lwd = 2, add=TRUE)
-  sp::plot( smMask, border = "red", lwd = 2, add=TRUE)
-
-  prepped_layers <- x
-  rm('x')
-}
 
 # Final data adjustments 
 
 # Extract the data for the cluster analyses
-stack_data <- getValues( prepped_layers )
+stack_data   <- getValues( prepped_layers )
 
 # remove any rows with an NA
 # NB: This decouples the data from the RasterStack and 
 #   needs to be put back together for some analyses below.
+# ALSO: Blows up with a single layer in the stack 
+
+
 clean_idx <- complete.cases(stack_data)
 stack_data_clean <- stack_data[ clean_idx, ]
 
-dim( stack_data )
-dim( stack_data_clean )
+dim(stack_data)
+
+#na_positions <- apply(stack_data, 1, anyNA) # takes a long time ... 
+na_positions <- !clean_idx 
+
+str(stack_data)
+length(stack_data)
+length(clean_idx)
+length(na_positions)
+
+SO ... complete.cases() appears to be working ... 
+
+
+
 
 #---- Part 3 of 8: Explore number of clusters using Within-sum-of-squares plot ----
 # Run multiple times with different number of clusters
@@ -150,7 +160,7 @@ plotme
 
 
 #---- Part 4 of 8: Create and examine the clusters. ----
-nclust <- 10 # the number of clusters based on Part 2, above.
+nclust <- 4 # the number of clusters based on Part 2, above.
 
 # Perform k-means clustering. 500k good for exploration. 
 # The full data set takes a few minutes with above randomz. 
@@ -198,7 +208,7 @@ pal_heat <- rev( brewer.pal(n = nclust, name = "RdYlBu")) # heat map palette
 sidx <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
 samp <- stack_data_clean[ sidx, ]
 # re-run cluster for smaller sample.
-cluster_result <- kmeans(samp, centers = nclust, nstart = radomz) # less than 10 seconds
+cluster_result <- kmeans(samp, centers = nclust, nstart = randomz) # less than 10 seconds
 csamp <- cluster_result$cluster
 
 # Put the pieces together for the PCA by combining the data and the cluster. 
@@ -267,38 +277,50 @@ ggscatter(
 # NB: Here have the option to re-cluster the entire data set for mapping.
 #   Uses iter.max and nstart from above.
 
-allDat <- F
+# Prepare a new raster for the cluster visualization
+cluster_raster <- prepped_layers[[1]]
+# dataType(cluster_raster) <- "INT1U" seems to fuck things up somehow ... 
 
+length(cluster_result$cluster)
+
+# Flag for re-clustering using all data prior to rebuilding.
+allDat <- T
 if (allDat) {
-# Prepare a zeroed raster for the cluster assignment
-  cluster_raster <- prepped_layers$bathymetry
-  dataType(cluster_raster) <- "INT1U"
-  cluster_raster[] <- NA
-  
   # Cluster the entire data set for mapping ... 
     # less than 1 min with iter.max = 20, nstart = 20 for smallest region
+  
+  
+  clean_idx <- complete.cases(stack_data)
+  stack_data_clean <- stack_data[ clean_idx, ]
+  na_positions <- !clean_idx
+  
   cluster_result <- kmeans(stack_data_clean, centers = nclust, nstart = randomz, iter.max = imax)
   
   # Assign the clustered values ... 
-  cluster_raster[ complete.cases( stack_data ), ] <- cluster_result$cluster
+  new_values <- values( cluster_raster )
+  new_values[ clean_idx ] <- cluster_result$cluster
+  values( cluster_raster ) <- new_values  
+
   raster::hist(cluster_result$cluster)
 } else {
+  # This part is a bit harder as need to deal with the sub-sampling ... 
   
-  cluster_raster <- prepped_layers$bathymetry
-  dataType(cluster_raster) <- "INT1U"
-  cluster_raster[] <- NA
-  
-  # Assign the clustered values ... 
-  cluster_raster[ complete.cases( stack_data ), ] <- cluster_result$cluster
-  #raster::hist(cluster_result$cluster)
   
 }
+
+range(cluster_result$cluster)
+cellStats(cluster_raster, range)
+
+# ???
+  
+
+
+# Plot the cluster raster ... 
 # Define color palette
 pal_clust <- brewer.pal(n = nclust, "Accent")
 
 # trim and check the raster before plotting
 a <- trim(cluster_raster)
-unique( values( a$bathymetry ))
 
 # plot( a , col = pal_clust,
 #      main = "K-means Clustering Result" )
@@ -311,6 +333,11 @@ levelplot( a, margin = F,
            colorkey = ckey,
            par.settings = myTheme,
            main = "K-means Clustering Result - Local extents" )
+
+
+writeRaster( a, paste0( data_dir, "/foo.tif"), overwrite=TRUE)
+
+
 
 #---- ----
 #---- Outlier Detection ----

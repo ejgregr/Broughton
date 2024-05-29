@@ -1,11 +1,11 @@
-# Broughton biophysical classification for kelp at three spatial extents
+# Broughton physical classification for kelp version 2
 
-__Created:__      2024/02/12 Forgive me father, its been over 2 years since my last R project.
+__Created:__      2024/05/29 Cloned from Broughton version 1 to extend to LSSM work.
 __Main author:__  Edward Gregr  
 __Affiliation:__  SciTech Environmental Consulting   
 __Location:__     Vancouver, BC   
 __Contact:__      e-mail: ed@scitechconsulting.com | tel: 604-612-8324
-__Last Update:__  2024/02/12   
+__Last Update:__  2024/05/29   
 __Version:__      R version 4.3.2 x64
 
 - [Objective](#objective)
@@ -21,24 +21,20 @@ __Version:__      R version 4.3.2 x64
 - [References](#references)
 
 ## Objective
-Following the methods of Mora-Soto et al. 2024, create a k-means clustering of biophysical layers to support the representation of kelp habitat in British Columbia, with a particular focus on the Broughton region.
-
-From the DFO statement of work: This project will provide an R script to generate clusters representing areas of common environmental conditions from existing spatial layers, with examples of outputs generated across two spatial extents (i.e., Broughton Archipelago and the Queen Charlotte Strait region).
+Building on the k-means clustering of physical layers done for DFO/MSEA, this project focuses on building clusters for the Broughton region to support the creation of relevant oceanographic contexts. 
 
 ## Summary   
 
 ## Status
-2024/03/22: Developmental milestone with data loaded, scaled, and displayed prior to clustering. Good learnings around rasters.
+2024/05/29: Cloned from DFO work to allow clean delivery and further development. 
 
-Next steps: cross-correlation table; data transformations; update with latest data; rubric for finalizing predictors, cluster number, cluster stability methods. 
-
-
+Next steps: Explore data from the Bianucci FVCOMM model and other data prepared by Romina Barossa. 
 
 ## Contents and methods
 
 
 ### Data loading
-Source data include rasters of regional 20 m predictors, and independent observations of kelp communities from the DFO field programs.
+Source data include ... 
 
 Data structures resulting from the data load include: ... These processed observations are used for the analysis and are included in the distributed code package.  
 

@@ -1,14 +1,49 @@
+raster.list <- list.files(path = raster_dir, pattern = '\\.tif$', full.names = TRUE)
 
-names(data.layers)
-names(scaled.layers)
+x <- raster( raster.list[ 1] )
+str(x)
+dim(x)
+
+if (cellStats(x, min) < -5) {
+  values(x)[ values(x) < 0 ] <- NA }
+
+raster::plot(x, maxpixels = 2000000 )
+
+writeRaster( x, paste0( data_dir, "/foo.tif"), overwrite=TRUE)
 
 
 
 
 
+# make a list of predictor rasters
+raster.list <- list.files(path = raster_dir, pattern = '\\.tif$', full.names = TRUE)
+  
+  # make list of raster names (without extension)
+  raster.names <- lapply(raster.list, FUN = function(raster.layer){
+    substr(basename(raster.layer), 1, nchar(basename(raster.layer)) - 4)
+  } )
+  
+  # create a raster stack from raster_list
+
+raster.stack <- raster::stack(x = raster.list)
+
+names(raster.stack)
+foo <- getValues(raster.stack$bathymetry)
+min( na.omit(foo) )
+max( na.omit(foo) )
 
 
-names( scaled.layers ) <- names(data.layers)
+names(scaled_layers)
+
+str(scaled_layers$bathymetry)
+
+x <- getValues( scaled_layers[[1]] )
+
+
+names(data_layers)
+
+
+
 
 
 

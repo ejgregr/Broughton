@@ -1,0 +1,102 @@
+---
+title: "Broughton ecological classification"
+author: "Edward Gregr"
+date: "May 01 2024"
+output:
+  html_document: 
+    keep_md: yes
+    theme: yeti
+    highlight: haddock
+    toc: yes
+    toc_float: yes
+---
+<style type="text/css">
+#TOC {
+  color: black;
+}
+</style>
+
+
+This work will support 2 distinct, but related projects. First, for DFO, the classification will provide a framework, based on the existing, substantial body of existing data, to support the organisation and subsequent analysis of relevant macroalgal data for the Pacific Regions. Second, as pat of the BC-funded climate ready seafood program, this work will provide a regional classification of the Broughton region that will provide a summary of local physical data relevant to local communities. We hope it will provide a pathway to weave together scientific and Indigenous knowledge, while also underpinning the spatial analyses envisioned by the Local Seaweed Services Model (LSSM).
+
+# Objective
+From the DFO statement of work: This project will provide an R script to generate clusters representing areas of common environmental conditions from existing spatial layers, with examples of outputs generated across two spatial extents (i.e., Broughton Archipelago and the Queen Charlotte Strait region).
+
+From the Broughton RSSM proposal, the objective is to classify the study area into a polygon representation suitable for supporting the spatial analyses of the LSSM. We will; 1) standardize available data sets to best reasonable spatial resolution (likely the local 20 x 20 m2 bathymetric grid - Davies et al. 2020); and 2) Prepare a classification analysis examining how spatial extents influence clusters created with the k-means clustering algorithm.
+
+## Background   
+Following the methods of Mora-Soto et al. 2024, create a k-means clustering of biophysical layers to support the representation of kelp habitat in British Columbia, with a particular focus on the Broughton region.
+
+## Data summary
+A collection of 20x20 m2 coastal TIFFs to be classified using k-means. Homemade masks (2) of restrictions to the study area as shape files.  
+
+
+After Loading, I cleaned and classified the data brick.
+
+
+
+
+NOTES:  
+1) ... 
+2) ...
+
+# Methods
+To compare classifications across different spatial extents. 
+
+*italics?* 
+**bold?** 
+
+<!-- Is this a text comment?
+<!-- ``` -->
+
+NOTES:  
+More notes.
+
+## R packages
+
+dplyr: A fast, consistent set of tools for working with data frame like objects, both in memory and out of memory.  
+
+ggplot2: A system for 'declaratively' creating graphics based on ``The Grammar of Graphics''. You provide the data, tell 'ggplot2' how to map variables to aesthetics, what graphical primitives to use, and it takes care of the details. 
+Hmisc: Contains many functions useful for data analysis, high-level graphics, utility operations, functions for computing sample size and power, simulation, importing and annotating datasets,
+imputing missing values, advanced table making, variable clustering, character string manipulation, conversion of R objects to LaTeX and html code, and recoding variables. Used here to add standard deviation to as lines to ggplot.
+
+knitr: Provides a general-purpose tool for dynamic report generation in R using Literate Programming techniques. Used here for Markdown formatting as html or pdf.
+
+lubridate : Functions to work with date-times and time-spans: fast and user friendly parsing of date-time data, extraction and updating of components of a date-time (years, months, days, hours, minutes, and seconds), algebraic manipulation on date-time and time-span objects. Used here to pool dates to month.
+
+markdown: R Markdown allows the use of knitr and Pandoc in the R environment. This package translates R Markdown to standard Markdown that knitr and Pandoc render to the desired output format (e.g., PDF, HTML, Word, etc).
+
+purrr: A complete and consistent functional programming toolkit for data manupulation in R.  
+
+readxl: Imports excel files into R.  
+
+reshape2: Flexibly restructure and aggregate data using just two functions: melt and 'dcast'. Used here for ggplot() support. 
+
+tibble: Functions for manipulating the tibble data format in R. Used here for the deframe() function.  
+
+vegan: Ordination methods, diversity analysis and other functions for community and vegetation ecologists.  
+
+# Results
+
+## Part 1: Metrics across all prey 
+### Metrics by month
+
+__*Table 1a, b: Mean (mn) and standard deviations (sd) by month for forage ratio (FRATIO), prey abundance (PABUND), prey richness (RICH) and prey diversity (DINDEX) statistics for a) fry and b) smolts.*__
+
+
+
+### Metrics by month across transects
+
+__*Table 2a, b: Mean (mn) and standard deviations (sd) by transects within months for forage ratio (FRATIO), prey abundance (PABUND), prey richness (RICH) and prey diversity (DINDEX) statistics for a) fry and b) smolts.*__
+
+Text goes here 
+
+
+__*Figure 4: Metrics for each group by MONTH, faceted by TRANSECT.*__
+
+
+## Heading 2
+More text
+
+### Heading 3
+
