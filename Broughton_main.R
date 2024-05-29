@@ -30,104 +30,89 @@ source( "broughton_functions.R" )
 # Otherwise, it will be loaded from rData. Watch for dependencies.
 
 loadtifs <- T
-trimdata <- F # relevant only to depth-derived layers contain terrestrial elevations 
-scaledat <- F # only needed if new layers loaded 
-spacesub <- F # True if a spatial subset of the data is desired. Requires a polygon shape file. 
+clipdata <- T # Restrict the spatial extents of the tifs using a supplied polygon shape file mask
+scaledat <- T # only needed if new layers loaded 
 
 
 #---- Part 1 of 8: Load, clean, and display rasters for processing  ----
 # If loadtifs == TRUE then run all this else load the processed data.
 
 tif_stack <- stack()
-dat_brick <- brick()
+today <- format(Sys.Date(), "%Y-%m-%d")
 
 if (loadtifs) {
   print( "Loading predictors ... ")
-  tif_stack <- LoadPredictors( raster_dir )
+  src_stack <- LoadPredictors( raster_dir )
   print( "Data loaded ... ")
-    
-  today <- format(Sys.Date(), "%Y-%m-%d")
-  save( tif_stack, file = paste0( data_dir, '/source_rasters_', today, '.rData' ))
-  print( "Data saved ... ")
+
+  tif_stack <- src_stack
   
-  tmp_stack <- tif_stack
-
-  if (trimdata){
-    print( "Trimming TIFs ... ")
-    tmp_stack <- TrimPredictors( tif_stack, mask )
+  if (clipdata) {
+    print( "clipping TIFs ... ")
+    #mask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
+    mask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
+    tmp_stack <- raster::mask(tif_stack, mask )
+    tif_stack <- trim( tmp_stack )
+    print('Rasters clipped and trimmed.')
   }
-  dat_brick <- tmp_stack
-
-  if (scaledat){
+  
+  # Tempting to trim() here too, but reducing raster extents (in a brick?) only works
+  # if trimmed results are the same.
+  
+  if (scaledat) {
     print( "Scaling TIFs ... ")
-    dat_brick <- ScalePredictors( tmp_stack )
+    tmp_stack <- scale( tif_stack )
+    tif_stack <- tmp_stack
+    print('Rasters Scaled.')
   }
+
+  save( src_stack, file = paste0( data_dir, '/source_tifs_', today, '.rData' ))
+  save( tif_stack, file = paste0( data_dir, '/prepped_tifs_', today, '.rData' ))
+
 } else {
   print( 'Loading project data ... ')
-  load( paste0( tif_stack, '/source_tifs_2024-05-01.rData' ))
-  load( paste0( dat_brick, '/data_brick_2024-05-01.rData' ))
+  # Ideally meaningfully named and tested so no source is required.
+  load( paste0( tif_stack, '/prepped_tifs_2024-05-01.rData' ))
 }
  
-# TIF and DAT stacks created.
 
 
-# Intergerize scaled data to reduce data size and improve performance. 
-prepped_layers <- Integerize( dat_brick )
+save( tif_stack, file = paste0( data_dir, '/tifs_MSEA_scaled_smMask_', today, '.rData' ))
+
+
+#-- Intergerize scaled data to reduce data size and improve performance. 
+prepped_layers <- Integerize( tif_stack )
 
 dim(prepped_layers)
 names(prepped_layers)
 
+x <- brick(prepped_layers)
+y <- trim(x)
+
+#-- Visualize source data
 plot( prepped_layers )
 raster::hist(prepped_layers, nclass=50)
 par(mfrow = c(1, 1))
 
-# Remove precursor layer(s) cuz memory ... 
-rm( 'scaled_layers' )
-
-# Quick correlation across data layers
+#-- Quick correlation across data layers
 x <- getValues( prepped_layers )
 x_clean <- x[ complete.cases(x), ]
 y <- cor( x_clean )
 y
 
-# Remove highly correlated layers.
-  # Drop rugosity for now ... 
+#-- Remove any unwanted layer.
+  # Drop rugosity as correlated with SDSlope 
 prepped_layers <- dropLayer( prepped_layers, "rugosity" )
 names( prepped_layers )
 
+
 #---- Part 2 of 8: Final data preparation ----
-
-if (spacesub) {
-
-  sMask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
-  smMask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
-
-  # Data extents No mask and polygons
-  x  <- prepped_layers
-  
-  # Use only one of the loaded shapefiles
-  x  <- raster::mask(x, sMask )
-  # x  <- raster::mask(x, smMask )
-  
-  # Plot first layer in the resulting stack for inspection
-  plot(trim(x[[1]]), main = 'Local')
-  
-  # Plot masks over raster. NB: will only see if raster extends beyond the masks. 
-  sp::plot( sMask, border = "darkgreen", lwd = 2, add=TRUE)
-  sp::plot( smMask, border = "red", lwd = 2, add=TRUE)
-
-  prepped_layers <- x
-  rm('x')
-}
-
-# Final data adjustments 
 
 # Extract the data for the cluster analyses
 stack_data <- getValues( prepped_layers )
 
 # remove any rows with an NA
-# NB: This decouples the data from the RasterStack and 
-#   needs to be put back together for some analyses below.
+# NB: This decouples the data from the RasterStack and requires re-assembly for mapping
 clean_idx <- complete.cases(stack_data)
 stack_data_clean <- stack_data[ clean_idx, ]
 
