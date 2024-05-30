@@ -13,6 +13,8 @@
 # 2024/04/29: Git repo created and working version pushed prior to RMarkdown development.
 # 2024/05/02: Completed smoothing pass thru code; sorted raster plotting. Pushed.
 # 2024/05/07: Another pass thru, adding some controls. Ready for RMD work.Pushed.
+# 2024/05/29: After some exploratory work with Romina's tifs from SPECTRAL lab, forked the 
+#   code so this version focuses on DFO data/objectives and Broughton2 attends to the LSSM needs.
 
 # TO DO: 
 #  Design RMD report
@@ -31,6 +33,7 @@ source( "broughton_functions.R" )
 
 loadtifs <- T
 clipdata <- T # Restrict the spatial extents of the tifs using a supplied polygon shape file mask
+trimbath <- T # Used to trim land from MSEA data
 scaledat <- T # only needed if new layers loaded 
 
 
@@ -43,7 +46,7 @@ today <- format(Sys.Date(), "%Y-%m-%d")
 if (loadtifs) {
   print( "Loading predictors ... ")
   src_stack <- LoadPredictors( raster_dir )
-  print( "Data loaded ... ")
+  print( "Data loaded.")
 
   tif_stack <- src_stack
   
@@ -51,13 +54,16 @@ if (loadtifs) {
     print( "clipping TIFs ... ")
     #mask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
     mask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
-    tmp_stack <- raster::mask(tif_stack, mask )
-    tif_stack <- trim( tmp_stack )
-    print('Rasters clipped and trimmed.')
+    tif_stack <- ClipPredictors( tif_stack, mask )
+    print('Rasters clipped.')
   }
-  
-  # Tempting to trim() here too, but reducing raster extents (in a brick?) only works
-  # if trimmed results are the same.
+
+  # The landside on the MSEA bathymetry is not of interest to the classification. 
+  # Removes these pixels on the affected rasters. HARD-CODED! 
+  if (trimbath) {
+    tif_stack <- TrimLand( tif_stack )
+    print('Land removed from rasters.')
+  }
   
   if (scaledat) {
     print( "Scaling TIFs ... ")
@@ -66,28 +72,33 @@ if (loadtifs) {
     print('Rasters Scaled.')
   }
 
-  save( src_stack, file = paste0( data_dir, '/source_tifs_', today, '.rData' ))
-  save( tif_stack, file = paste0( data_dir, '/prepped_tifs_', today, '.rData' ))
-
+  save( src_stack, file = paste0( data_dir, '/src_stack_', today, '.rData' ))
+  save( tif_stack, file = paste0( data_dir, '/tif_stack_', today, '.rData' ))
+  #save( tif_stack, file = paste0( data_dir, '/tifs_MSEA_scaled_smMask_', today, '.rData' ))
+  
 } else {
   print( 'Loading project data ... ')
   # Ideally meaningfully named and tested so no source is required.
-  load( paste0( tif_stack, '/prepped_tifs_2024-05-01.rData' ))
+  load( paste0( data_dir, '/tifs_MSEA_scaled_smMask_2024-05-29.rData' ))
 }
  
 
+# Now trim and align to minimize NAs 
+# NB reducing raster extents (in a brick?) only works if trimmed results are the same.
+  
 
-save( tif_stack, file = paste0( data_dir, '/tifs_MSEA_scaled_smMask_', today, '.rData' ))
+plot( tif_stack )
+
+y 
 
 
 #-- Intergerize scaled data to reduce data size and improve performance. 
+  # NOTE: Throws an error on the lage MSEA data set ... no problem evident in the results. 
 prepped_layers <- Integerize( tif_stack )
 
 dim(prepped_layers)
 names(prepped_layers)
 
-x <- brick(prepped_layers)
-y <- trim(x)
 
 #-- Visualize source data
 plot( prepped_layers )
