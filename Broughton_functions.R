@@ -62,16 +62,48 @@ LoadPredictors <- function( pred_dir ) {
   return(raster.stack)
 }
 
-#---- ClipPredictors: limit extents based on a polygon mask
+
+#---- ClipPredictors: masks away deeper water and limits extents based on a polygon mask
 ClipPredictors <- function( stack_in, the_mask){
-  y <- stack()
+  z <- stack()
   for (i in 1:dim( stack_in)[[3]] ) {
-    x <- raster::mask(tif_stack[[i]], mask )
-    y <- stack( y,x )
-    print( paste0('tif ', i, ' clipped.'))
+    x <- raster::crop(stack_in[[i]], the_mask )
+    y <- raster::mask(x, the_mask)
+    z <- stack( z, y )
+    print( paste0('layer ', i, ' clipped.'))
   }
-  return( y )
+  return( z )
 }
+
+
+#x <- raster::crop(tif_stack[[1]], the_mask )
+#y <- raster::mask(x, the_mask)
+#z <- stack( z, y )
+
+
+
+#---- TrimStack: limit extents based on a polygon mask (vestigial)
+TrimStack <- function( stack_in, padsize ) {
+# NOTE: This is now superseded by the crop/mask approach in ClipPredictors.
+# Assigning extents here worked but results odd - plots appeared but looked empty.
+  y <- stack()
+  # estimate extents from first raster ... 
+  x <- trim(stack_in[[1]], padsize )
+  x_ext <- extent(x)
+  x_ext <- ceiling( x_ext )
+  extent( x ) <- x_ext
+  y <- stack(y, x)
+  print( paste0('layer 1 trimmed.'))
+  
+  # use these extents for the remaining layers ...
+  for (i in 2:dim( stack_in)[[3]] ) {
+    x <- setExtent( stack_in[[i]], x_ext, keepres=T, snap=T )
+    y <- stack( y, x )
+    print( paste0('layer ', i, ' trimmed.'))
+  }
+  return( y )  
+}
+
 
 
 ScalePredictors <- function( the_stack ){
@@ -98,17 +130,18 @@ Integerize <- function( in_layers, sig = 1000 ) {
 }
 
 
-#---- Trim the land part away ----
-TrimLand <- function( data_in ){
+#---- Set unsuitable elevations to NA ----
+DropNonHabitat <- function( data_in ){
   
-  # Removing all data above the HHWL, assumed to be 5 m.
-  # This is to avoid spurious scaling and classification, and outliers.
+  # To avoid spurious scaling and classification, and outliers, this 
+  # removes all data above the HHWL (assumed to be 5 m) AND below 40 m depth. 
   # NOTE: Hard-coded for three MSEA layers.
   
   trim_layers <- data_in
   
   trim_data <- getValues( trim_layers$bathymetry )
-  trim_idx <- trim_data < -5
+  trim_idx <- (trim_data < -5 | trim_data > 40 )
+  
   trim_data[ trim_idx ] <- NA
   trim_layers$bathymetry <- setValues( trim_layers$bathymetry, as.integer( trim_data ))
   trim_layers$bathymetry <- setMinMax( trim_layers$bathymetry )
@@ -122,7 +155,7 @@ TrimLand <- function( data_in ){
   trim_data[ trim_idx ] <- NA
   trim_layers$standard_deviation_slope <- setValues( trim_layers$standard_deviation_slope, trim_data )
   trim_layers$standard_deviation_slope <- setMinMax( trim_layers$standard_deviation_slope )
-  print( "Data trimmed ... ")
+  print( "Data trimmed. ")
 
   return( trim_layers )
 }

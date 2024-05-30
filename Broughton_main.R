@@ -33,9 +33,7 @@ source( "broughton_functions.R" )
 
 loadtifs <- T
 clipdata <- T # Restrict the spatial extents of the tifs using a supplied polygon shape file mask
-trimbath <- T # Used to trim land from MSEA data
 scaledat <- T # only needed if new layers loaded 
-
 
 #---- Part 1 of 8: Load, clean, and display rasters for processing  ----
 # If loadtifs == TRUE then run all this else load the processed data.
@@ -52,19 +50,18 @@ if (loadtifs) {
   
   if (clipdata) {
     print( "clipping TIFs ... ")
-    #mask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
-    mask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
-    tif_stack <- ClipPredictors( tif_stack, mask )
+    #amask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_small.shp")
+    amask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
+    tif_stack <- ClipPredictors( tif_stack, amask )
     print('Rasters clipped.')
   }
 
-  # The landside on the MSEA bathymetry is not of interest to the classification. 
-  # Removes these pixels on the affected rasters. HARD-CODED! 
-  if (trimbath) {
-    tif_stack <- TrimLand( tif_stack )
-    print('Land removed from rasters.')
-  }
-  
+  # The landside on the MSEA bathymetry is not of interest to the classification.
+  # Deeper areas are also unsuitable for kelps. This removes those  pixels from 
+  # the affected rasters. HARD-CODED! 
+  tif_stack <- DropNonHabitat( tif_stack )
+  print('Unsuitable elevations removed.')
+
   if (scaledat) {
     print( "Scaling TIFs ... ")
     tmp_stack <- scale( tif_stack )
@@ -74,7 +71,7 @@ if (loadtifs) {
 
   save( src_stack, file = paste0( data_dir, '/src_stack_', today, '.rData' ))
   save( tif_stack, file = paste0( data_dir, '/tif_stack_', today, '.rData' ))
-  #save( tif_stack, file = paste0( data_dir, '/tifs_MSEA_scaled_smMask_', today, '.rData' ))
+  save( tif_stack, file = paste0( data_dir, '/tifs_MSEA_scaled_smMask_', today, '.rData' ))
   
 } else {
   print( 'Loading project data ... ')
@@ -83,13 +80,11 @@ if (loadtifs) {
 }
  
 
-# Now trim and align to minimize NAs 
-# NB reducing raster extents (in a brick?) only works if trimmed results are the same.
-  
-
 plot( tif_stack )
 
-y 
+a <- tif_stack[[1]]
+writeRaster( a, paste0( data_dir, "/foo.tif"), overwrite=TRUE)
+
 
 
 #-- Intergerize scaled data to reduce data size and improve performance. 
@@ -308,7 +303,10 @@ levelplot( a, margin = F,
            par.settings = myTheme,
            main = "K-means Clustering Result - Local extents" )
 
-#---- ----
+
+writeRaster( a, paste0( data_dir, "/foo.tif"), overwrite=TRUE)
+
+
 #---- Outlier Detection ----
 # Work with the full data set. 
 cluster_result$centers
@@ -376,7 +374,7 @@ rmarkdown::render( "Broughton.Rmd",
 
 
 #---- Some details on correlation analysis ... ----
-#-- Correlation across UN-scaled data layers ... 
+#---- Correlation across UN-scaled datalayers ----
 # foo <- getValues( scaled_layers )
 # foo_clean <- na.omit(stack_data)
 # pick <- sample( 1:length( foo_clean[ , 1] ), 10000 )
@@ -390,6 +388,7 @@ rmarkdown::render( "Broughton.Rmd",
 #plot( stack_data_clean[ pick,'rugosity'] ~ stack_data_clean[ pick,'standard_deviation_slope'] )
 
 #---- ----
+
 
 # FIN.
 
