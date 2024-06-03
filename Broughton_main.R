@@ -76,20 +76,21 @@ if (loadtifs) {
 } else {
   print( 'Loading project data ... ')
   # Ideally meaningfully named and tested so no source is required.
-  load( paste0( data_dir, '/tifs_MSEA_scaled_smMask_2024-05-29.rData' ))
+  load( paste0( data_dir, '/tifs_MSEA_scaled_smMask_2024-05-30.rData' ))
 }
  
 
 plot( tif_stack )
-
-a <- tif_stack[[1]]
-writeRaster( a, paste0( data_dir, "/foo.tif"), overwrite=TRUE)
-
+#NOTE: Everything from here down is in scaled units. 
 
 
 #-- Intergerize scaled data to reduce data size and improve performance. 
   # NOTE: Throws an error on the lage MSEA data set ... no problem evident in the results. 
 prepped_layers <- Integerize( tif_stack )
+
+prepped_layers <- tif_stack
+
+
 
 dim(prepped_layers)
 names(prepped_layers)
@@ -141,7 +142,7 @@ plotme
 
 
 #---- Part 4 of 8: Create and examine the clusters. ----
-nclust <- 10 # the number of clusters based on Part 2, above.
+nclust <- 6 # the number of clusters based on Part 2, above.
 
 # Perform k-means clustering. 500k good for exploration. 
 # The full data set takes a few minutes with above randomz. 
@@ -189,7 +190,7 @@ pal_heat <- rev( brewer.pal(n = nclust, name = "RdYlBu")) # heat map palette
 sidx <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
 samp <- stack_data_clean[ sidx, ]
 # re-run cluster for smaller sample.
-cluster_result <- kmeans(samp, centers = nclust, nstart = radomz) # less than 10 seconds
+cluster_result <- kmeans(samp, centers = nclust, nstart = randomz) # less than 10 seconds
 csamp <- cluster_result$cluster
 
 # Put the pieces together for the PCA by combining the data and the cluster. 
@@ -254,57 +255,142 @@ ggscatter(
   stat_mean(aes(color = cluster), size = 4)
 
 
-#---- Part 8 of 8: Spatialize the cluster results ----
-# NB: Here have the option to re-cluster the entire data set for mapping.
-#   Uses iter.max and nstart from above.
+#---- Part 8 of 9: Violins of predictor contributions to clusters ----
 
-allDat <- F
+class(cluster_result$cluster)
+str(cluster_result$cluster)
+is.vector(cluster_result$cluster)
 
-if (allDat) {
-# Prepare a zeroed raster for the cluster assignment
-  cluster_raster <- prepped_layers$bathymetry
-  dataType(cluster_raster) <- "INT1U"
-  cluster_raster[] <- NA
-  
-  # Cluster the entire data set for mapping ... 
-    # less than 1 min with iter.max = 20, nstart = 20 for smallest region
+x <- as.data.frame( stack_data_clean )
+x$cluster <- as.factor( cluster_result$cluster )
+
+y <- x %>%
+  pivot_longer(cols = -cluster, names_to = "predictor", values_to = "value")
+
+
+# Create violin plot
+ggplot(y, aes(x = cluster, y = value, fill = cluster)) +
+  geom_violin(trim = FALSE) +
+  facet_wrap(~ predictor, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Violin Plots of Predictors Across k-means Clusters",
+       x = "Cluster",
+       y = "Value")
+
+
+#---- Part 9 of 9: Spatialize the cluster results ----
+# NB: To show a comprehensive map, can either:
+#     a) re-clust+er the entire data set (using iter.max and nstart from above) or
+#     b) Predict to the unsampled portion of the raster. 
+
+
+reclust = F
+
+# initialize target data structure 
+cluster_raster <- prepped_layers[[1]]
+dataType(cluster_raster) <- "INT1U"
+cluster_raster[] <- NA
+
+if (reclust == T) {
+
+  # Re-cluster using all the clean data  ... 
+  # less than 1 min with iter.max = 20, nstart = 20 for smallest region
   cluster_result <- kmeans(stack_data_clean, centers = nclust, nstart = randomz, iter.max = imax)
-  
+
   # Assign the clustered values ... 
-  cluster_raster[ complete.cases( stack_data ), ] <- cluster_result$cluster
-  raster::hist(cluster_result$cluster)
+  # extract values from the target cluster
+  new_values <- values( cluster_raster )
+  # replace non-NA values with the cluster results
+  new_values[ clean_idx ] <- cluster_result$cluster
+  # put the updated values back on the target cluster
+  values( cluster_raster ) <- new_values  
 } else {
+  # Uses samp and sidx from lines ~150 above.
+  # Find the things not in the sample ... 
+  not_sidx <- setdiff( 1:dim(stack_data_clean)[[1]], sidx )
   
-  cluster_raster <- prepped_layers$bathymetry
-  dataType(cluster_raster) <- "INT1U"
-  cluster_raster[] <- NA
+  # this is the data to predict clusters for.
+  new_dat <- stack_data_clean[ not_sidx, ]
   
-  # Assign the clustered values ... 
-  cluster_raster[ complete.cases( stack_data ), ] <- cluster_result$cluster
-  #raster::hist(cluster_result$cluster)
+  # Process the new data in chunks of 10k to ensure performance
+  chunk_size <- 10000
+  n_chunks <- ceiling(nrow(new_dat) / chunk_size)
+  
+  # Where we are putting our new chunks
+  predicted_clusters <- vector("integer", nrow(new_dat))
+  
+  for ( i in seq_len(n_chunks) ) {
+    start_index <- (i - 1) * chunk_size + 1
+    end_index <- min(i * chunk_size, nrow(new_dat))
+    
+    chunk <- new_dat[start_index:end_index, ]
+    predicted_clusters[start_index:end_index] <- PredictClusters(chunk, cluster_result)
+  }
+  
+  # extract values from the target cluster
+  updated_values <- values( cluster_raster )
+  # replace clustered values with the cluster results
+  updated_values[ sidx ] <- cluster_result$cluster
+  # replace the predicted values with the cluster predictions
+  updated_values[ not_sidx ] <- pred_clusters
+  # reassign to the plotting raster
+  values( cluster_raster ) <- updated_values 
   
 }
+
+
+#--- Display the results, first as histogram then as map.  
+raster::hist( values(cluster_raster ))
+
 # Define color palette
 pal_clust <- brewer.pal(n = nclust, "Accent")
-
-# trim and check the raster before plotting
-a <- trim(cluster_raster)
-unique( values( a$bathymetry ))
-
-# plot( a , col = pal_clust,
-#      main = "K-means Clustering Result" )
 
 ckey <- list( at=0:nclust, 
               title="Clusters", 
               col = pal_clust)
 myTheme <- rasterTheme( region = pal_clust )
-levelplot( a, margin = F, 
+levelplot( cluster_raster, margin = F, 
            colorkey = ckey,
            par.settings = myTheme,
            main = "K-means Clustering Result - Local extents" )
 
 
-writeRaster( a, paste0( data_dir, "/foo.tif"), overwrite=TRUE)
+writeRaster( cluster_raster, paste0( data_dir, "/6cluster_locale.tif"), overwrite=TRUE)
+
+
+
+
+
+#---- Predict clusters from a sample to full set of predictors values. ----
+# Using samp and sidx from lines 150 above ... 
+# not( sidx ), or similar, identifies the ones that need prediction.
+# the clustered and predicted data then need to be combined. 
+
+# Find the things not in the sample ... 
+dim( stack_data_clean )
+dim( samp )
+
+sidx
+
+not_sidx <- setdiff( 1:dim(stack_data_clean)[[1]], sidx )
+
+new_dat <- stack_data_clean[ not_sidx, ]
+
+# Process the data to predict in chunks of 10k ...
+chunk_size <- 10000
+n_chunks <- ceiling(nrow(new_dat) / chunk_size)
+predicted_clusters <- vector("integer", nrow(new_dat))
+
+for (i in seq_len(n_chunks)) {
+  start_index <- (i - 1) * chunk_size + 1
+  end_index <- min(i * chunk_size, nrow(new_dat))
+  
+  chunk <- new_dat[start_index:end_index, ]
+  predicted_clusters[start_index:end_index] <- PredictClusters(chunk, cluster_result)
+}
+
+
+
 
 
 #---- Outlier Detection ----

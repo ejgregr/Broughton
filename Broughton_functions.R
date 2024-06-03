@@ -129,7 +129,7 @@ Integerize <- function( in_layers, sig = 1000 ) {
   return( int_layers )
 }
 
-
+ 
 #---- Set unsuitable elevations to NA ----
 DropNonHabitat <- function( data_in ){
   
@@ -161,7 +161,7 @@ DropNonHabitat <- function( data_in ){
 }
 
 
-#---- MakeScreePlot: retuns a ggplot. ----
+#---- MakeScreePlot: returns a ggplot. ----
 # samp is optional, uses all dat if omitted.
 MakeScreePlot <- function( indat, nclust, nrand, maxi, sampsize = 0 ){
   #initialize list for results
@@ -199,9 +199,20 @@ MakeScreePlot <- function( indat, nclust, nrand, maxi, sampsize = 0 ){
 }
 
 
+#---- PredictClusters: returns cluster assignments for un-clustered pictures. ----
+# Assembly required with the classified pixels before plotting.
+# Function by ChatGPT.
+PredictClusters <- function(newdata, kmeans_model) {
+  centers <- kmeans_model$centers
+  dists <- as.matrix(dist(rbind(centers, newdata)))
+  dists <- dists[-(1:nrow(centers)), 1:nrow(centers)]
+  cluster_assignments <- apply(dists, 1, which.min)
+  return(cluster_assignments)
+}
+
 
  
-####------------Depreciated ore replaced functions----------------------------
+####------------Depreciated or replaced functions----------------------------
 
 
 # if (spacesub) {
