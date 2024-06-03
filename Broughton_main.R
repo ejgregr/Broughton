@@ -31,11 +31,11 @@ source( "broughton_functions.R" )
 # Processing FLAGS. When set to true, the data structure will be re-built from imported data. 
 # Otherwise, it will be loaded from rData. Watch for dependencies.
 
-loadtifs <- T
+loadtifs <- F
 clipdata <- T # Restrict the spatial extents of the tifs using a supplied polygon shape file mask
 scaledat <- T # only needed if new layers loaded 
 
-#---- Part 1 of 8: Load, clean, and display rasters for processing  ----
+#---- Part 1 of 9: Load, clean, and display rasters for processing  ----
 # If loadtifs == TRUE then run all this else load the processed data.
 
 tif_stack <- stack()
@@ -79,18 +79,13 @@ if (loadtifs) {
   load( paste0( data_dir, '/tifs_MSEA_scaled_smMask_2024-05-30.rData' ))
 }
  
-
-plot( tif_stack )
+#--------------------------------------------------
 #NOTE: Everything from here down is in scaled units. 
 
-
 #-- Intergerize scaled data to reduce data size and improve performance. 
-  # NOTE: Throws an error on the lage MSEA data set ... no problem evident in the results. 
+# NOTE: 2024/06/03: Throws a warning (layers no data) on the MSEA data set ... no problem evident in results. 
 prepped_layers <- Integerize( tif_stack )
-
-prepped_layers <- tif_stack
-
-
+#prepped_layers <- tif_stack
 
 dim(prepped_layers)
 names(prepped_layers)
@@ -113,7 +108,7 @@ prepped_layers <- dropLayer( prepped_layers, "rugosity" )
 names( prepped_layers )
 
 
-#---- Part 2 of 8: Final data preparation ----
+#---- Part 2 of 9: Final data preparation ----
 
 # Extract the data for the cluster analyses
 stack_data <- getValues( prepped_layers )
@@ -126,7 +121,7 @@ stack_data_clean <- stack_data[ clean_idx, ]
 dim( stack_data )
 dim( stack_data_clean )
 
-#---- Part 3 of 8: Explore number of clusters using Within-sum-of-squares plot ----
+#---- Part 3 of 9: Explore number of clusters using Within-sum-of-squares plot ----
 # Run multiple times with different number of clusters
 # Initialize total within sum of squares errors: wss
 
@@ -141,8 +136,8 @@ plotme <- MakeScreePlot( stack_data_clean, nclust, randomz, imax, 25000 )
 plotme
 
 
-#---- Part 4 of 8: Create and examine the clusters. ----
-nclust <- 6 # the number of clusters based on Part 2, above.
+#---- Part 4 of 9: Create and examine the clusters. ----
+nclust <- 7 # the number of clusters based on Part 2, above.
 
 # Perform k-means clustering. 500k good for exploration. 
 # The full data set takes a few minutes with above randomz. 
@@ -150,52 +145,58 @@ sidx <- sample( 1:length( stack_data_clean[ , 1] ), 500000 )
 samp <- stack_data_clean[ sidx, ]
 cluster_result <- kmeans(samp, centers=nclust, nstart=randomz, iter.max=imax) 
 
-# Summary of centres and relationship to predictors 
-cluster_result$centers
-x <- as.data.frame( cluster_result$centers )
-for (i in names(x)){
-  print( paste0( i, ":  ", round( range(x[i])[1], 2), " to ", round( range(x[i])[2], 2 ),
-                "   Extent = ", round( abs( range(x[i])[1] - range(x[i])[2]), 2 )
-        ))
-}
+#---- Part 5 of 9: Violins of predictor contributions to clusters ----
 
-# Expose and examine the cluster results
-# NB: there are ~103M raster cells in the Broughton region. 
-length( cluster_result$cluster )
+x <- as.data.frame( samp )
+x$cluster <- as.factor( cluster_result$cluster )
 
-#---- Part 5 of 8: Examine silhouette plot of the current cluster result ----
+y <- x %>%
+  pivot_longer(cols = -cluster, names_to = "predictor", values_to = "value")
+
+# Create violin plot
+ggplot(y, aes(x = cluster, y = value, fill = cluster)) +
+  geom_violin(trim = FALSE) +
+  facet_wrap(~ predictor, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Violin Plots of Predictors Across k-means Clusters",
+       x = "Cluster",
+       y = "Value")
+
+
+#---- Part 6 of 9: Examine silhouette plot of the current cluster result ----
 # Requires the data (i.e., cell attributes) and the corresponding assigned cluster
 # Need to subsample from the cluster result above as distance matrix take long time.
 
 # Calculating dissimilarity matrix (dist() below) takes a long time ... 
 # 100000 way to much ... took 30ish min. 50k is ~1 min to completion. 
+
+# Just take a subsample of the clusters for the silhouette plot. 
 silx <- sample( 1:length( samp[ , 1] ), 10000 )
 
 cs <- cluster_result$cluster[ silx ]
 ss <- samp[ silx, ]
 
 c_dist <- dist(ss)
-sk <- silhouette(cs, c_dist) #also timeconsuming ... 
+sk <- silhouette(cs, c_dist) #also time consuming ... 
 
 #plot(sk, border=NA )
 par(mfrow = c(1, 1))
 plot(sk, col = 1:nclust, border=NA )
 
-#---- Part 6 of 8: Heat map of within-cluster standard deviations ----
+#---- Part 7 of 9: Heat map of within-cluster standard deviations ----
 
 # Define color palette
 pal_heat <- rev( brewer.pal(n = nclust, name = "RdYlBu")) # heat map palette
 
-# Create a smaller sample for some of the time-intensive subsequent steps  ... 
-sidx <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
-samp <- stack_data_clean[ sidx, ]
+ssidx <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
+ssamp <- stack_data_clean[ ssidx, ]
 # re-run cluster for smaller sample.
-cluster_result <- kmeans(samp, centers = nclust, nstart = randomz) # less than 10 seconds
+cluster_result <- kmeans(ssamp, centers = nclust, nstart = randomz) # less than 10 seconds
 csamp <- cluster_result$cluster
 
 # Put the pieces together for the PCA by combining the data and the cluster. 
 # Put cluster # first so easy to find for PCA below
-profile_data <- as.data.frame( cbind(cluster = csamp, samp ) )
+profile_data <- as.data.frame( cbind(cluster = csamp, ssamp ) )
 
 dim( profile_data )
 names( profile_data )
@@ -218,7 +219,7 @@ z <- ggplot(xm, aes(x=cluster, y=variable, fill=value) ) +
 z
 
 
-#---- Part 7 of 8: Show cluster groupings using PCA ----
+#---- Part 8 of 9: Show cluster groupings using PCA ----
 # NB: This takes some time on the full data set. Uses profile_data from Part 5.
 # Use profile data created from samples above. 
 
@@ -255,34 +256,10 @@ ggscatter(
   stat_mean(aes(color = cluster), size = 4)
 
 
-#---- Part 8 of 9: Violins of predictor contributions to clusters ----
-
-class(cluster_result$cluster)
-str(cluster_result$cluster)
-is.vector(cluster_result$cluster)
-
-x <- as.data.frame( stack_data_clean )
-x$cluster <- as.factor( cluster_result$cluster )
-
-y <- x %>%
-  pivot_longer(cols = -cluster, names_to = "predictor", values_to = "value")
-
-
-# Create violin plot
-ggplot(y, aes(x = cluster, y = value, fill = cluster)) +
-  geom_violin(trim = FALSE) +
-  facet_wrap(~ predictor, scales = "free_y") +
-  theme_minimal() +
-  labs(title = "Violin Plots of Predictors Across k-means Clusters",
-       x = "Cluster",
-       y = "Value")
-
-
 #---- Part 9 of 9: Spatialize the cluster results ----
 # NB: To show a comprehensive map, can either:
 #     a) re-clust+er the entire data set (using iter.max and nstart from above) or
 #     b) Predict to the unsampled portion of the raster. 
-
 
 reclust = F
 
@@ -305,16 +282,23 @@ if (reclust == T) {
   # put the updated values back on the target cluster
   values( cluster_raster ) <- new_values  
 } else {
+  
+  #--- Two steps here: First assign clusters to the rest of the clean stack data, 
+  #     THEN put the clean data back in the raster.
   # Uses samp and sidx from lines ~150 above.
-  # Find the things not in the sample ... 
+  # Find the things not in the sample (using sidx from line ~150 above).
+
+  length(sidx)
   not_sidx <- setdiff( 1:dim(stack_data_clean)[[1]], sidx )
   
-  # this is the data to predict clusters for.
+  # the data to predict clusters for
   new_dat <- stack_data_clean[ not_sidx, ]
-  
   # Process the new data in chunks of 10k to ensure performance
   chunk_size <- 10000
   n_chunks <- ceiling(nrow(new_dat) / chunk_size)
+  
+  print( paste0( "predicting clusters for ", length(new_dat), " pixels using ", 
+                 n_chunks, " chunks of ", chunk_size, ". Stand by ... ") )
   
   # Where we are putting our new chunks
   predicted_clusters <- vector("integer", nrow(new_dat))
@@ -325,19 +309,25 @@ if (reclust == T) {
     
     chunk <- new_dat[start_index:end_index, ]
     predicted_clusters[start_index:end_index] <- PredictClusters(chunk, cluster_result)
+    print( i )
   }
+  
+  # Complete the results for the cleaned data ... 
+  clean_clusts <- array( 1: dim(stack_data_clean)[1] )
+  clean_clusts[ sidx ] <- cluster_result$cluster
+  clean_clusts[ not_sidx ] <- predicted_clusters
   
   # extract values from the target cluster
   updated_values <- values( cluster_raster )
   # replace clustered values with the cluster results
-  updated_values[ sidx ] <- cluster_result$cluster
-  # replace the predicted values with the cluster predictions
-  updated_values[ not_sidx ] <- pred_clusters
+  updated_values[ clean_idx ] <- clean_clusts
   # reassign to the plotting raster
   values( cluster_raster ) <- updated_values 
   
 }
 
+x<-dim(stack_data_clean)
+x-500000
 
 #--- Display the results, first as histogram then as map.  
 raster::hist( values(cluster_raster ))
@@ -355,39 +345,37 @@ levelplot( cluster_raster, margin = F,
            main = "K-means Clustering Result - Local extents" )
 
 
-writeRaster( cluster_raster, paste0( data_dir, "/6cluster_locale.tif"), overwrite=TRUE)
+writeRaster( cluster_raster, paste0( data_dir, "/locale_7cluster.tif"), overwrite=TRUE)
 
 
 
-
-
-#---- Predict clusters from a sample to full set of predictors values. ----
-# Using samp and sidx from lines 150 above ... 
-# not( sidx ), or similar, identifies the ones that need prediction.
-# the clustered and predicted data then need to be combined. 
-
-# Find the things not in the sample ... 
-dim( stack_data_clean )
-dim( samp )
-
-sidx
-
-not_sidx <- setdiff( 1:dim(stack_data_clean)[[1]], sidx )
-
-new_dat <- stack_data_clean[ not_sidx, ]
-
-# Process the data to predict in chunks of 10k ...
-chunk_size <- 10000
-n_chunks <- ceiling(nrow(new_dat) / chunk_size)
-predicted_clusters <- vector("integer", nrow(new_dat))
-
-for (i in seq_len(n_chunks)) {
-  start_index <- (i - 1) * chunk_size + 1
-  end_index <- min(i * chunk_size, nrow(new_dat))
-  
-  chunk <- new_dat[start_index:end_index, ]
-  predicted_clusters[start_index:end_index] <- PredictClusters(chunk, cluster_result)
-}
+# #---- Predict clusters from a sample to full set of predictors values. ----
+# # Using samp and sidx from lines 150 above ... 
+# # not( sidx ), or similar, identifies the ones that need prediction.
+# # the clustered and predicted data then need to be combined. 
+# 
+# # Find the things not in the sample ... 
+# dim( stack_data_clean )
+# dim( samp )
+# 
+# sidx
+# 
+# not_sidx <- setdiff( 1:dim(stack_data_clean)[[1]], sidx )
+# 
+# new_dat <- stack_data_clean[ not_sidx, ]
+# 
+# # Process the data to predict in chunks of 10k ...
+# chunk_size <- 10000
+# n_chunks <- ceiling(nrow(new_dat) / chunk_size)
+# predicted_clusters <- vector("integer", nrow(new_dat))
+# 
+# for (i in seq_len(n_chunks)) {
+#   start_index <- (i - 1) * chunk_size + 1
+#   end_index <- min(i * chunk_size, nrow(new_dat))
+#   
+#   chunk <- new_dat[start_index:end_index, ]
+#   predicted_clusters[start_index:end_index] <- PredictClusters(chunk, cluster_result)
+# }
 
 
 
