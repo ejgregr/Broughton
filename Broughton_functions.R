@@ -76,30 +76,6 @@ ClipPredictors <- function( stack_in, the_mask){
 }
 
 
-#---- TrimStack: limit extents based on a polygon mask (vestigial)
-# NOTE: This function now superseded by the crop/mask approach in ClipPredictors.
-TrimStack <- function( stack_in, padsize ) {
-# Assigning extents here worked but results odd - plots appeared but looked empty.
-  y <- stack()
-  # estimate extents from first raster ... 
-  x <- trim(stack_in[[1]], padsize )
-  x_ext <- extent(x)
-  x_ext <- ceiling( x_ext )
-  extent( x ) <- x_ext
-  y <- stack(y, x)
-  print( paste0('layer 1 trimmed.'))
-  
-  # use these extents for the remaining layers ...
-  for (i in 2:dim( stack_in)[[3]] ) {
-    x <- setExtent( stack_in[[i]], x_ext, keepres=T, snap=T )
-    y <- stack( y, x )
-    print( paste0('layer ', i, ' trimmed.'))
-  }
-  return( y )  
-}
-
-
-
 ScalePredictors <- function( the_stack ){
 # A little shimmy to avoid scaling substrate and name it consistently
 #  scaled_stack <- scale( dropLayer( the_stack, "SUBSTRATE") )
@@ -149,7 +125,7 @@ DropNonHabitat <- function( data_in ){
   trim_data[ trim_idx ] <- NA
   trim_layers$standard_deviation_slope <- setValues( trim_layers$standard_deviation_slope, trim_data )
   trim_layers$standard_deviation_slope <- setMinMax( trim_layers$standard_deviation_slope )
-  print( "Data trimmed. ")
+  print( "Nonhabitat removed.")
 
   return( trim_layers )
 }
@@ -193,6 +169,56 @@ MakeScreePlot <- function( indat, nclust, nrand, maxi, sampsize = 0 ){
 }
 
 
+#---- ClusterPCA: Returns a pair of PCA plots showing the separation of the clusters.
+# NOTE: Uses a relatively small subset of the overall data so these will change with a different sample.
+ClusterPCA <- function( n_samp, clustnum ) {
+  
+  ssidx <- sample( 1:length( stack_data_clean[ , 1] ), n_samp )
+  ssamp <- stack_data_clean[ ssidx, ]
+  
+  # re-run cluster for smaller sample.
+  cluster_result <- kmeans(ssamp, centers = clustnum, nstart = randomz) # less than 10 seconds
+  csamp <- cluster_result$cluster
+  
+  # Create the data structure for PCA profiling (combining predictor data with the clusters). 
+  # Put cluster # first so easy to find for PCA
+  p_data <- as.data.frame( cbind(cluster = csamp, ssamp ) )
+  
+  res_pca <- prcomp(p_data[,-1],  scale = TRUE)
+  # PC coordinates of individual raster cells
+  ind_coord <- as.data.frame(get_pca_ind(res_pca)$coord)
+  # Add clusters from the classification
+  ind_coord$cluster <- factor( p_data$cluster )
+  # Data inspection
+  #head(ind_coord)
+  
+  # Percentage of variance explained by dimensions
+  eigenvalue <- round(get_eigenvalue(res_pca), 1)
+  var_percent <- eigenvalue$variance.percent
+  
+  # Look at the clusters for the first 4 PCs
+  a <- ggscatter(
+    ind_coord, x = "Dim.1", y = "Dim.2", 
+    color = "cluster", palette = "simpsons", ellipse = TRUE, ellipse.type = "convex",
+    size = 1.5,  legend = "right", ggtheme = theme_bw(),
+    xlab = paste0("Dim 1 (", var_percent[1], "% )" ),
+    ylab = paste0("Dim 2 (", var_percent[2], "% )" )
+  ) +
+    stat_mean(aes(color = cluster), size = 4)
+  
+  b <- ggscatter(
+    ind_coord, x = "Dim.3", y = "Dim.4", 
+    color = "cluster", palette = "simpsons", ellipse = TRUE, ellipse.type = "convex",
+    size = 1.5,  legend = "right", ggtheme = theme_bw(),
+    xlab = paste0("Dim 3 (", var_percent[3], "% )" ),
+    ylab = paste0("Dim 4 (", var_percent[4], "% )" )
+  ) +
+    stat_mean(aes(color = cluster), size = 4)
+  
+  return( list(res_pca, a, b))
+}
+
+
 #---- PredictClusters: returns cluster assignments for un-clustered pictures. ----
 # Assembly required with the classified pixels before plotting.
 # Function by ChatGPT.
@@ -205,8 +231,31 @@ PredictClusters <- function(newdata, kmeans_model) {
 }
 
 
+
  
 ####------------Depreciated or replaced functions----------------------------
+
+#---- TrimStack: limit extents based on a polygon mask (vestigial)
+# NOTE: This function now superseded by the crop/mask approach in ClipPredictors.
+TrimStack <- function( stack_in, padsize ) {
+  # Assigning extents here worked but results odd - plots appeared but looked empty.
+  y <- stack()
+  # estimate extents from first raster ... 
+  x <- trim(stack_in[[1]], padsize )
+  x_ext <- extent(x)
+  x_ext <- ceiling( x_ext )
+  extent( x ) <- x_ext
+  y <- stack(y, x)
+  print( paste0('layer 1 trimmed.'))
+  
+  # use these extents for the remaining layers ...
+  for (i in 2:dim( stack_in)[[3]] ) {
+    x <- setExtent( stack_in[[i]], x_ext, keepres=T, snap=T )
+    y <- stack( y, x )
+    print( paste0('layer ', i, ' trimmed.'))
+  }
+  return( y )  
+}
 
 
 # if (spacesub) {
