@@ -83,7 +83,8 @@ if (loadtifs) {
 #NOTE: Everything from here down is in scaled units. 
 
 #-- Intergerize scaled data to reduce data size and improve performance. 
-# NOTE: 2024/06/03: Throws a warning (layers no data) on the MSEA data set ... no problem evident in results. 
+# NOTE: 2024/06/03: Integerize throws a warning (layers with no data) on the MSEA data set.
+#   but no problem evident in results. Nevertheless, 
 prepped_layers <- Integerize( tif_stack )
 #prepped_layers <- tif_stack
 
@@ -102,7 +103,7 @@ x_clean <- x[ complete.cases(x), ]
 y <- cor( x_clean )
 y
 
-#-- Remove any unwanted layer.
+#-- Remove any unwanted layers.
   # Drop rugosity as correlated with SDSlope 
 prepped_layers <- dropLayer( prepped_layers, "rugosity" )
 names( prepped_layers )
@@ -121,27 +122,25 @@ stack_data_clean <- stack_data[ clean_idx, ]
 dim( stack_data )
 dim( stack_data_clean )
 
-#---- Part 3 of 9: Explore number of clusters using Within-sum-of-squares plot ----
+#---- Part 3 of 9: Explore number of clusters using Within-sum-of-squares scree plot ----
 # Run multiple times with different number of clusters
-# Initialize total within sum of squares errors: wss
 
 set.seed <- 42 # Seed for reproducibility
 randomz  <- 20 # the number of randomizations for kmeans to do.
 imax     <- 25 # maximum iterations to try for convergence
 nclust   <- 18 # number of clusters for scree plot
+nsample  <- 25000 # Scree plot needs a subsample to run reasonably. 
 
-# Needs a subsample to run reasonably. Running all data is minutes per iteration ... 
-#*** Deal with the warnings from kmeans
-plotme <- MakeScreePlot( stack_data_clean, nclust, randomz, imax, 25000 )
+plotme <- MakeScreePlot( stack_data_clean, nclust, randomz, imax, nsample )
 plotme
 
-
 #---- Part 4 of 9: Create and examine the clusters. ----
-nclust <- 7 # the number of clusters based on Part 2, above.
+# Perform k-means clustering. Sample of 500k good for exploration. 
 
-# Perform k-means clustering. 500k good for exploration. 
-# The full data set takes a few minutes with above randomz. 
-sidx <- sample( 1:length( stack_data_clean[ , 1] ), 500000 )
+nclust  <- 6 # the number of clusters based on scree plot, above.
+nsample <- 500000 # a larger sample for more robust classification
+
+sidx <- sample( 1:length( stack_data_clean[ , 1] ), nsample )
 samp <- stack_data_clean[ sidx, ]
 cluster_result <- kmeans(samp, centers=nclust, nstart=randomz, iter.max=imax) 
 
@@ -163,44 +162,12 @@ ggplot(y, aes(x = cluster, y = value, fill = cluster)) +
        y = "Value")
 
 
-#---- Part 6 of 9: Examine silhouette plot of the current cluster result ----
-# Requires the data (i.e., cell attributes) and the corresponding assigned cluster
-# Need to subsample from the cluster result above as distance matrix take long time.
-
-# Calculating dissimilarity matrix (dist() below) takes a long time ... 
-# 100000 way to much ... took 30ish min. 50k is ~1 min to completion. 
-
-# Just take a subsample of the clusters for the silhouette plot. 
-silx <- sample( 1:length( samp[ , 1] ), 10000 )
-
-cs <- cluster_result$cluster[ silx ]
-ss <- samp[ silx, ]
-
-c_dist <- dist(ss)
-sk <- silhouette(cs, c_dist) #also time consuming ... 
-
-#plot(sk, border=NA )
-par(mfrow = c(1, 1))
-plot(sk, col = 1:nclust, border=NA )
-
-#---- Part 7 of 9: Heat map of within-cluster standard deviations ----
+#---- Part 6 of 9: Heat map of within-cluster standard deviations ----
 
 # Define color palette
 pal_heat <- rev( brewer.pal(n = nclust, name = "RdYlBu")) # heat map palette
 
-ssidx <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
-ssamp <- stack_data_clean[ ssidx, ]
-# re-run cluster for smaller sample.
-cluster_result <- kmeans(ssamp, centers = nclust, nstart = randomz) # less than 10 seconds
-csamp <- cluster_result$cluster
-
-# Put the pieces together for the PCA by combining the data and the cluster. 
-# Put cluster # first so easy to find for PCA below
-profile_data <- as.data.frame( cbind(cluster = csamp, ssamp ) )
-
-dim( profile_data )
-names( profile_data )
-sort( unique( profile_data$cluster ))
+profile_data <- as.data.frame( cbind(cluster = cluster_result$cluster, samp ) )
 
 cluster_sd <- profile_data %>%
   group_by(cluster) %>%
@@ -218,10 +185,36 @@ z <- ggplot(xm, aes(x=cluster, y=variable, fill=value) ) +
   labs(title = "Within-cluster Standard Deviation", x = "Clusters", y = "Attributes", fill = "Value")
 z
 
+#---- Part 7 of 9: Examine silhouette plot of the CURRENT cluster result ----
+# Requires the data (i.e., cell attributes) and the corresponding assigned cluster
+# Need to subsample from the cluster result above as distance matrix take long time.
+
+# Take a subsample of the clusters for the silhouette plot. 
+silx <- sample( 1:length( samp[ , 1] ), 10000 )
+
+cs <- cluster_result$cluster[ silx ]
+ss <- samp[ silx, ]
+
+c_dist <- dist(ss)
+sk <- silhouette(cs, c_dist) #also time consuming ... 
+
+#plot(sk, border=NA )
+par(mfrow = c(1, 1))
+plot(sk, col = 1:nclust, border=NA )
+
 
 #---- Part 8 of 9: Show cluster groupings using PCA ----
-# NB: This takes some time on the full data set. Uses profile_data from Part 5.
-# Use profile data created from samples above. 
+# NB: This takes some time on a larger sample. Create a new cluster to make a smaller version of profile_data
+
+ssidx <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
+ssamp <- stack_data_clean[ ssidx, ]
+# re-run cluster for smaller sample.
+cluster_result <- kmeans(ssamp, centers = nclust, nstart = randomz) # less than 10 seconds
+csamp <- cluster_result$cluster
+
+# Put the pieces together for the PCA by combining the data and the cluster. 
+# Put cluster # first so easy to find for PCA below
+profile_data <- as.data.frame( cbind(cluster = csamp, ssamp ) )
 
 res.pca <- prcomp(profile_data[,-1],  scale = TRUE)
   # PC coordinates of individual raster cells
@@ -288,7 +281,6 @@ if (reclust == T) {
   # Uses samp and sidx from lines ~150 above.
   # Find the things not in the sample (using sidx from line ~150 above).
 
-  length(sidx)
   not_sidx <- setdiff( 1:dim(stack_data_clean)[[1]], sidx )
   
   # the data to predict clusters for
@@ -297,7 +289,7 @@ if (reclust == T) {
   chunk_size <- 10000
   n_chunks <- ceiling(nrow(new_dat) / chunk_size)
   
-  print( paste0( "predicting clusters for ", length(new_dat), " pixels using ", 
+  print( paste0( "predicting clusters for ", dim(new_dat)[[1]], " pixels using ", 
                  n_chunks, " chunks of ", chunk_size, ". Stand by ... ") )
   
   # Where we are putting our new chunks
@@ -309,25 +301,25 @@ if (reclust == T) {
     
     chunk <- new_dat[start_index:end_index, ]
     predicted_clusters[start_index:end_index] <- PredictClusters(chunk, cluster_result)
-    print( i )
+    cat(i, " ")
   }
   
-  # Complete the results for the cleaned data ... 
-  clean_clusts <- array( 1: dim(stack_data_clean)[1] )
+  length(predicted_clusters)
+  length(cluster_result$cluster)
+  # Combine the results for the cleaned data ... 
+  clean_clusts <- array( 1:dim(stack_data_clean)[1] )
   clean_clusts[ sidx ] <- cluster_result$cluster
   clean_clusts[ not_sidx ] <- predicted_clusters
   
   # extract values from the target cluster
-  updated_values <- values( cluster_raster )
+  new_values <- values( cluster_raster )
   # replace clustered values with the cluster results
-  updated_values[ clean_idx ] <- clean_clusts
+  new_values[ clean_idx ] <- clean_clusts
   # reassign to the plotting raster
-  values( cluster_raster ) <- updated_values 
+  values( cluster_raster ) <- new_values 
   
 }
 
-x<-dim(stack_data_clean)
-x-500000
 
 #--- Display the results, first as histogram then as map.  
 raster::hist( values(cluster_raster ))

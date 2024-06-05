@@ -76,15 +76,9 @@ ClipPredictors <- function( stack_in, the_mask){
 }
 
 
-#x <- raster::crop(tif_stack[[1]], the_mask )
-#y <- raster::mask(x, the_mask)
-#z <- stack( z, y )
-
-
-
 #---- TrimStack: limit extents based on a polygon mask (vestigial)
+# NOTE: This function now superseded by the crop/mask approach in ClipPredictors.
 TrimStack <- function( stack_in, padsize ) {
-# NOTE: This is now superseded by the crop/mask approach in ClipPredictors.
 # Assigning extents here worked but results odd - plots appeared but looked empty.
   y <- stack()
   # estimate extents from first raster ... 
