@@ -1,21 +1,22 @@
 #----------------------------------------------------------------------------
-# Script:  broughton_functions.R
-# Created: February 2024. EJG
+# Script:  Broughton2_functions.R
+# Created: May 2024 from the original Broughton script. EJG
 #
 # Purpose: Support building and evaluation of Seaweed Clusters for Coastal BC.
 # Illustrated at 3 spatial extents using the Broughton Region.
 #
 # Notes:
-#  - 2024/02/12: Created from Substrate code streamlined for the paper submission.
+#  - 2024/06/05: Updated from the almost final DFO version.
 
 
 #================================== Load require packages =================================
 
 # check for any required packages that aren't installed and install them
 required.packages <- c( "ggplot2", "reshape2", "tidyr","dplyr", "raster", "stringr", "rasterVis",
-                        "RColorBrewer", "factoextra", "ggpubr", "cluster", "rmarkdown","lubridate" )
+                        "RColorBrewer", "factoextra", "ggpubr", "cluster", "rmarkdown","lubridate",
+                        "knitr")
 
-# "diffeR", "vegan", "ranger", "rgdal", "e1071", "forcats", "measures", "caret", "PresenceAbsence"
+# "diffeR", "vegan", "ranger", "e1071", "forcats", "measures", "caret", "PresenceAbsence"
 # "randomForest", "spatialEco", "xlsx", "robustbase", "biomod2", "sp", "magrittr", "tinytex", "rmarkdown", "binr", 'gwxtab'
 
 uninstalled.packages <- required.packages[!(required.packages %in% installed.packages()[, "Package"])]
@@ -28,14 +29,7 @@ lapply(required.packages, require, character.only = TRUE)
 #lapply(required.packages, library, character.only = TRUE)
 
 
-#=========================== Data sources and constants =====================================
-
-#-- Set source and output directories. Directory will be created if doesn't exist; file will be overwritten if it does.
-#raster.dir  <- 'C:/Data/SpaceData/Substrate2019/Predictors/QCS'
-raster_dir <- 'C:/Data/Git/Broughton_descriptors/MSEA'
-#raster_dir <- 'C:/Data/Git/Broughton/Data/Predictors'
-data_dir   <- 'C:/Data/Git/Broughton/Data'
-rmd_dir    <- 'C:/Data/Git/Broughton' 
+### Constants ###
 
 # proj4 string for albers projection with NAD83 datum
 spat_ref <- '+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 +y_0=0 +datum=NAD83 +units=m +no_defs +ellps=GRS80 +towgs84=0,0,0'
@@ -44,23 +38,104 @@ spat_ref <- '+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 
 #===================================== Functions =========================================
 
 #---- Loads predictors from specified subdirectory -----
-LoadPredictors <- function( pred_dir ) {
-  
-  print( list.files(path = pred_dir, pattern = '\\.tif$', full.names = FALSE) )
+LoadPredictors <- function( pred_dir ){
 
-  # make a list of predictor rasters
-  raster.list <- list.files(path = pred_dir, pattern = '\\.tif$', full.names = TRUE)
-  
-  
+  # Collect and show  the filenames in the source directory ...   
+  raster_list <- list.files(path = pred_dir, pattern = '\\.tif$', full.names = TRUE)
+  print( raster_list )
+
   # make list of raster names (without extension)
-  raster.names <- lapply(raster.list, FUN = function(raster.layer){
+  raster_names <- lapply(raster_list, FUN = function(raster.layer){
     substr(basename(raster.layer), 1, nchar(basename(raster.layer)) - 4)
   } )
   
-  # create a raster stack from raster_list
-  raster.stack <- raster::stack(x = raster.list)
-  return(raster.stack)
+  min_extents <- CalcMinExtents(pred_dir)
+  
+  raster_stack <- raster::stack()
+
+  for (i in 1:length(raster_list)) {
+    print(i)
+    x <- raster( raster_list[i] )  
+    y <- crop( x, min_extents)
+    raster_stack <- raster::stack( raster_stack, y )
+  }
+  return( raster_stack)
 }
+
+
+# Calculate the minimum extents for the rasters in the raster directory. 
+# This is applied to all the rasters and sets the extents of the clustering data
+CalcMinExtents <- function( rasdir ){
+  
+  raster_list <- list.files(path = rasdir, pattern = '\\.tif$', full.names = TRUE)
+  
+  xmins <- ymins <- xmaxs <- ymaxs <- NULL
+  for (i in 1:length( raster_list )){
+    xtents <- extent( raster( raster_list[i] ))
+    xmins  <- rbind( xmins, xtents@xmin )
+    xmaxs  <- rbind( xmaxs, xtents@xmax )
+    ymins  <- rbind( ymins, xtents@ymin )
+    ymaxs  <- rbind( ymaxs, xtents@ymax )
+  }
+  xtents@xmin <- max(xmins)
+  xtents@xmax <- min(xmaxs)
+  xtents@ymin <- max(ymins)
+  xtents@ymax <- min(ymaxs)
+  
+  return(xtents)
+}
+
+
+#---- Set unsuitable elevations to NA ----
+DropNonHabitat <- function( data_in, zmin, zmax ){
+  
+  # To avoid spurious scaling and classification, and outliers, this 
+  # removes all data above the HHWL (assumed to be 5 m) AND below 40 m depth. 
+  # NOTE: Hard-coded for three MSEA layers.
+  
+  # build the required trim index to apply to all layers ... 
+  trim_data <- getValues( data_in$bathymetry )
+  trim_idx <- (trim_data < zmin | trim_data > zmax )
+  trim_data[ trim_idx ] <- NA
+  
+  for (i in 1:dim(data_in)[[3]] ){
+    
+    trim_data <- getValues( data_in[[i]] )
+    trim_data[ trim_idx ] <- NA
+    data_in[[i]] <- setValues( data_in[[i]], trim_data )
+    data_in[[i]] <- setMinMax( data_in[[i]] )
+  }
+  
+  print( "Nonhabitat removed.")
+  return( data_in )
+}
+
+#   # Create the 'base' raster stack - it determines spatial reference. 
+#   x <- raster( raster.list[1] )
+#   raster.stack <- addLayer( raster.stack, x)
+#   out.extent <- extent(x)
+#   out.proj   <- crs( x )
+#   
+#   # Untested code for adjusting a raster ... 
+#   for (i in 2:length(raster.list)) {
+#     # unfortunate these have to be separate
+#     print( raster.names[[i]] )
+#     z <- raster( raster.list[i] )
+#     z.proj <- crs(z) 
+#     z.ext  <-extent( z ) 
+#     if ( (z.ext == out.extent) & (z.proj@projargs == out.proj@projargs) ){
+#       raster.stack <- addLayer( raster.stack, z)
+#     } else {
+#       print( (z.ext == out.extent) )
+#       print( (z.proj@projargs == out.proj@projargs) )
+#       # zz <- fixed raster ...
+# #      crs( z ) <- CRS( out.proj )
+#       crs( z ) <- out.proj
+#       extent( z ) <- out.extent
+#       z <- crop(z, out_extent)
+#       raster.stack <- addLayer( raster.stack, z)
+#     }
+#   }
 
 
 #---- ClipPredictors: masks away deeper water and limits extents based on a polygon mask
@@ -76,16 +151,6 @@ ClipPredictors <- function( stack_in, the_mask){
 }
 
 
-ScalePredictors <- function( the_stack ){
-# A little shimmy to avoid scaling substrate and name it consistently
-#  scaled_stack <- scale( dropLayer( the_stack, "SUBSTRATE") )
-#  scaled_stack <- stack( scaled_stack, trim_layers$SUBSTRATE )
-# safe to assume its the last layer in the stack
-#  names( scaled_stack[[ dim(scaled_stack)[[3]] ]] ) <- "substrate"
-  
-} 
-
-
 #---- Returns a stack of integerized rasters from a raster stack ----
 Integerize <- function( in_layers, sig = 1000 ) {
   int_layers <- brick()
@@ -99,36 +164,7 @@ Integerize <- function( in_layers, sig = 1000 ) {
   return( int_layers )
 }
 
- 
-#---- Set unsuitable elevations to NA ----
-DropNonHabitat <- function( data_in ){
-  
-  # To avoid spurious scaling and classification, and outliers, this 
-  # removes all data above the HHWL (assumed to be 5 m) AND below 40 m depth. 
-  # NOTE: Hard-coded for three MSEA layers.
-  
-  trim_layers <- data_in
-  
-  trim_data <- getValues( trim_layers$bathymetry )
-  trim_idx <- (trim_data < -5 | trim_data > 40 )
-  
-  trim_data[ trim_idx ] <- NA
-  trim_layers$bathymetry <- setValues( trim_layers$bathymetry, as.integer( trim_data ))
-  trim_layers$bathymetry <- setMinMax( trim_layers$bathymetry )
-  
-  trim_data <- getValues( trim_layers$rugosity )
-  trim_data[ trim_idx ] <- NA
-  trim_layers$rugosity <- setValues( trim_layers$rugosity, trim_data )
-  trim_layers$rugosity <- setMinMax( trim_layers$rugosity )
-  
-  trim_data <- getValues( trim_layers$standard_deviation_slope )
-  trim_data[ trim_idx ] <- NA
-  trim_layers$standard_deviation_slope <- setValues( trim_layers$standard_deviation_slope, trim_data )
-  trim_layers$standard_deviation_slope <- setMinMax( trim_layers$standard_deviation_slope )
-  print( "Nonhabitat removed.")
 
-  return( trim_layers )
-}
 
 
 #---- MakeScreePlot: returns a ggplot. ----
@@ -205,7 +241,17 @@ ClusterPCA <- function( n_samp, clustnum ) {
     ylab = paste0("Dim 2 (", var_percent[2], "% )" )
   ) +
     stat_mean(aes(color = cluster), size = 4)
-  
+
+  pca_loadings <- data.frame(res_pca$rotation)
+  pca_scores   <- data.frame(res_pca$x)
+  pca_loadings <- pca_loadings * max(abs(pca_scores$PC1), abs(pca_scores$PC2))
+
+  arrow_plot <- a +
+    geom_segment(data = pca_loadings, aes(x = 0, y = 0, xend = PC1, yend = PC2),
+                 arrow = arrow(length = unit(0.2, "cm")), color = "blue") +
+    geom_text(data = pca_loadings, aes(x = PC1, y = PC2, label = rownames(pca_loadings)), 
+              hjust = 0, vjust = 1, color = "red")
+
   b <- ggscatter(
     ind_coord, x = "Dim.3", y = "Dim.4", 
     color = "cluster", palette = "simpsons", ellipse = TRUE, ellipse.type = "convex",
@@ -214,14 +260,15 @@ ClusterPCA <- function( n_samp, clustnum ) {
     ylab = paste0("Dim 4 (", var_percent[4], "% )" )
   ) +
     stat_mean(aes(color = cluster), size = 4)
-  
-  return( list(res_pca, a, b))
+ 
+  print( "Done clusters ...")
+  return( list(res_pca, arrow_plot, b))
 }
 
 
+
 #---- PredictClusters: returns cluster assignments for un-clustered pictures. ----
-# Assembly required with the classified pixels before plotting.
-# Function by ChatGPT.
+# Assembly required with the classified pixels before plotting. Function by ChatGPT.
 PredictClusters <- function(newdata, kmeans_model) {
   centers <- kmeans_model$centers
   dists <- as.matrix(dist(rbind(centers, newdata)))
@@ -231,8 +278,55 @@ PredictClusters <- function(newdata, kmeans_model) {
 }
 
 
+#---- TransferClusters: returns new values for the prediction rasters containing predictions. ----
+# transferred from the random sample used in the classification ----
+# Assembly required with the classified pixels before plotting. Function by ChatGPT.
+transferCluster <- function(values_target, c_result){
+# uses GLOBALS sidx, stack_data_clean   
+  #--- Two steps here: First assign clusters to the rest of the clean stack data, 
+  #     THEN put the clean data back in the raster.
+  # Uses samp and sidx from lines ~150 above.
+  # Find the things not in the sample (using sidx from line ~150 above).
+  
+  not_sidx <- setdiff( 1:dim(stack_data_clean)[[1]], sidx )
+  
+  # the data to predict clusters for
+  new_dat <- stack_data_clean[ not_sidx, ]
+  # Process the new data in chunks of 10k to ensure performance
+  chunk_size <- 10000
+  n_chunks <- ceiling(nrow(new_dat) / chunk_size)
+  
+  print( paste0( "predicting clusters for ", dim(new_dat)[[1]], " pixels using ", 
+                 n_chunks, " chunks of ", chunk_size, ". Stand by ... ") )
+  
+  # Where we are putting our new chunks
+  predicted_clusters <- vector("integer", nrow(new_dat))
+  
+  for ( i in seq_len(n_chunks) ) {
+    start_index <- (i - 1) * chunk_size + 1
+    end_index <- min(i * chunk_size, nrow(new_dat))
+    
+    chunk <- new_dat[start_index:end_index, ]
+    predicted_clusters[start_index:end_index] <- PredictClusters(chunk, c_result)
+    cat(i, " ")
+  }
+  
+  #length(predicted_clusters)
+  #length(c_result$cluster)
+  # Combine the results for the cleaned data ... 
+  clean_clusts <- array( 1:dim(stack_data_clean)[1] )
+  clean_clusts[ sidx ] <- c_result$cluster
+  clean_clusts[ not_sidx ] <- predicted_clusters
+  
+  # replace clustered values with the cluster results
+  values_target[ clean_idx ] <- clean_clusts
+  # reassign to the plotting raster
+  return( values_target )
+}
 
- 
+
+
+
 ####------------Depreciated or replaced functions----------------------------
 
 #---- TrimStack: limit extents based on a polygon mask (vestigial)
@@ -280,6 +374,17 @@ TrimStack <- function( stack_in, padsize ) {
 #   prepped_layers <- x
 #   rm('x')
 # }
+
+
+
+ScalePredictors <- function( the_stack ){
+  # A little shimmy to avoid scaling substrate and name it consistently
+  #  scaled_stack <- scale( dropLayer( the_stack, "SUBSTRATE") )
+  #  scaled_stack <- stack( scaled_stack, trim_layers$SUBSTRATE )
+  # safe to assume its the last layer in the stack
+  #  names( scaled_stack[[ dim(scaled_stack)[[3]] ]] ) <- "substrate"
+  
+} 
 
 
 # Apply scaling to standardize rasters. Does either min/max or z-score.
