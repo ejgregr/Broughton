@@ -37,11 +37,11 @@ data_dir   <- 'C:/Data/Git/Broughton/Data'
 rmd_dir    <- 'C:/Data/Git/Broughton' 
 
 # Processing FLAGS...
-loadtifs <- T # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
+loadtifs <- F # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
 clipdata <- F # If true a spatial subset of the data will be taken based on a polygon shape file. 
 scaledat <- T # If true, imported data will be scaled using raster::scale().
 reclust  <- T # If true, re-cluster full data set prior to mapping, else predict to unclassified pixels.
-
+addKmDat <- T
 
 #---- Part 1 of 3: Load, clean, and prepare predictor data.  ----
 # If loadtifs == TRUE then run all this else load the processed data.
@@ -51,24 +51,24 @@ today <- format(Sys.Date(), "%Y-%m-%d")
 
 if (loadtifs) {
   print( "Loading predictors ... ")
-  src_stack <- LoadPredictors( raster_dir )
+  src_stack <- LoadPredictors( raster_dir, addKmDat )
   print( "Data loaded.")
 
   tif_stack <- src_stack
   
-    if (clipdata) {
+  # The landside on the MSEA bathymetry is not of interest to the classification.
+  # Deeper areas are also unsuitable for kelps. This removes those pixels from all rasters
+  tif_stack <- DropNonHabitat( tif_stack, -5, 40 )
+  print('Unsuitable elevations removed.')
+
+  if (clipdata) {
     print( "clipping TIFs ... ")
     amask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_region.shp")
     #amask <- shapefile("C:\\Data\\SpaceData\\Broughton\\broughton_smaller.shp")
     tif_stack <- ClipPredictors( tif_stack, amask )
     print('Rasters clipped.')
   }
-
-  # The landside on the MSEA bathymetry is not of interest to the classification.
-  # Deeper areas are also unsuitable for kelps. This removes those pixels from all rasters
-  tif_stack <- DropNonHabitat( tif_stack, -5, 40 )
-  print('Unsuitable elevations removed.')
-
+  
   if (scaledat) {
     print( "Scaling TIFs ... ")
     tmp_stack <- scale( tif_stack )
@@ -83,10 +83,10 @@ if (loadtifs) {
 } else {
   print( 'Loading project data ... ')
   # Ideally meaningfully named and tested so no source is required.
-  load( paste0( data_dir, '/tifs_DFO_scaled_QCS.rData' ))
+  load( paste0( data_dir, '/tifs_DFO_scaled_QCS_2024-09-04.rData' ))
 }
- 
 
+ 
 #---- Final data preparation ----
 #NOTE: Everything from here down is in scaled units. 
 
@@ -98,33 +98,26 @@ if (loadtifs) {
 #prepped_layers <- Integerize( tif_stack )
 prepped_layers <- tif_stack
 
+#-- Quick correlation across data layers
+x <- getValues( prepped_layers )
+x_clean <- x[ complete.cases(x), ]
+cor_table <- cor( x_clean )
+cor_table[lower.tri(cor_table)] <- NA
+(cor_table >= 0.6) & (cor_table != 1)
+
+#-- Remove correlated layers (see RMD document) 
+prepped_layers <- dropLayer( prepped_layers, c("bathymetry", "salinity_range", "temp_mean_summer", "circ_mean_summer",
+                                    "sst_sentinel_20m_bi_mean", "sst_sentinel_20m_bi_sd") )
+names( prepped_layers )
+
+# RENAME variables - after selection.
+
 #-- Visualize source data
 dim( prepped_layers )
 names( prepped_layers )
 plot( prepped_layers )
 raster::hist(prepped_layers, nclass=50)
 par(mfrow = c(1, 1))
-
-plot( prepped_layers[[1]] )
-
-#-- Quick correlation across data layers
-x <- getValues( prepped_layers )
-x_clean <- x[ complete.cases(x), ]
-cor_table <- cor( x_clean )
-
-#-- Remove any unwanted layers.
-  # Drop rugosity as correlated with SDSlope 
-prepped_layers <- dropLayer( prepped_layers, "rugosity" )
-names( prepped_layers )
-
-# Select specific layers from the SPECRAL data set
-prepped_layers <- stack( tif_stack$julST_ave, tif_stack$julBT_ave, tif_stack$julSS_ave, 
-                         tif_stack$julBS_ave, tif_stack$wind, tif_stack$tidal_cur )
-###Above is in LSSM code as well. SHould prob draw on prepped_layers.###
-
-
-names( prepped_layers )
-
 
 #-- Finalize the data for exploring and creating the clusters.
   # Extract the data for the cluster analyses
@@ -149,13 +142,13 @@ imax     <- 25 # maximum iterations to try for convergence
 # Runs kmeans with increasing number of clusters
 
 nclust   <- 18 # number of clusters for scree plot
-nsample  <- 25000 # Scree plot needs a subsample to run reasonably. 
+nsample  <- 50000 # Scree plot needs a subsample to run reasonably. 
 plotme <- MakeScreePlot( stack_data_clean, nclust, randomz, imax, nsample )
 plotme
 
 #---- Create a working set of N clusters (N based on scree plot) to further assess cluster number. ----
 
-nclust  <- 4 # the number of clusters based on scree plot, above.
+nclust  <- 7 # the number of clusters based on scree plot, above.
 nsample <- 500000 # a larger sample for more robust classification
 
 sidx <- sample( 1:length( stack_data_clean[ , 1] ), nsample )

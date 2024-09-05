@@ -38,7 +38,7 @@ spat_ref <- '+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 
 #===================================== Functions =========================================
 
 #---- Loads predictors from specified subdirectory -----
-LoadPredictors <- function( pred_dir ){
+LoadPredictors <- function( pred_dir, add_km_dat ){
 
   # Collect and show  the filenames in the source directory ...   
   raster_list <- list.files(path = pred_dir, pattern = '\\.tif$', full.names = TRUE)
@@ -49,18 +49,42 @@ LoadPredictors <- function( pred_dir ){
     substr(basename(raster.layer), 1, nchar(basename(raster.layer)) - 4)
   } )
   
-  min_extents <- CalcMinExtents(pred_dir)
-  
-  raster_stack <- raster::stack()
+  if (add_km_dat) {
+    sst_idx  <- grep("sentinel", raster_list)
+    sst_list <- raster_list[ sst_idx ]
+    raster_list <- raster_list[ -sst_idx ]
+  }
 
+  min_extents <- CalcMinExtents(pred_dir)
+  raster_stack <- raster::stack()
+    
   for (i in 1:length(raster_list)) {
     print(i)
     x <- raster( raster_list[i] )  
     y <- crop( x, min_extents)
     raster_stack <- raster::stack( raster_stack, y )
   }
+
+  if (add_km_dat) {
+    for (i in sst_list ) {
+      x <- raster( i )  
+      sst_ras <- resample( x, raster_stack[[1]])
+      raster_stack <- raster::stack( raster_stack, sst_ras )
+    }
+  }  
   return( raster_stack)
 }
+
+#----
+
+
+
+#----
+
+
+
+
+
 
 
 # Calculate the minimum extents for the rasters in the raster directory. 
