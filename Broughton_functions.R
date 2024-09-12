@@ -38,9 +38,12 @@ spat_ref <- '+proj=aea +lat_1=50 +lat_2=58.5 +lat_0=45 +lon_0=-126 +x_0=1000000 
 #===================================== Functions =========================================
 
 #---- Loads predictors from specified subdirectory -----
+# "add_km_dat" adds the SST values from Sentinel
 LoadPredictors <- function( pred_dir, add_km_dat ){
 
-  # Collect and show  the filenames in the source directory ...   
+  
+  pred_dir <- raster_dir
+  # Collect and show the filenames in the source directory ...   
   raster_list <- list.files(path = pred_dir, pattern = '\\.tif$', full.names = TRUE)
   print( raster_list )
 
@@ -52,13 +55,13 @@ LoadPredictors <- function( pred_dir, add_km_dat ){
   if (add_km_dat) {
     sst_idx  <- grep("sentinel", raster_list)
     sst_list <- raster_list[ sst_idx ]
-    raster_list <- raster_list[ -sst_idx ]
+    raster_list <- raster_list[ -sst_idx ] 
   }
 
   min_extents <- CalcMinExtents(pred_dir)
   raster_stack <- raster::stack()
     
-  for (i in 1:length(raster_list)) {
+  for (i in 1:length(raster_list)) { #This will loop 3 less if adding SST 
     print(i)
     x <- raster( raster_list[i] )  
     y <- crop( x, min_extents)
@@ -161,6 +164,7 @@ DropNonHabitat <- function( data_in, zmin, zmax ){
     data_in[[i]] <- setValues( data_in[[i]], trim_data )
     data_in[[i]] <- setMinMax( data_in[[i]] )
   }
+  print( "Unsuitable elevations removed.")
   
   # SUBSTRATE: Categoricals are hard in k-means. Easier to filter like depth. 
   # Sets values  >'2' to NA. 
@@ -181,7 +185,8 @@ DropNonHabitat <- function( data_in, zmin, zmax ){
     data_in[[i]] <- setValues( data_in[[i]], trim_data )
     data_in[[i]] <- setMinMax( data_in[[i]] )
   }
-  print( "Nonhabitat removed.")
+  print( "Unsuitable substrate removed.")
+  
   return( data_in )
 }
 

@@ -39,7 +39,7 @@ rmd_dir    <- 'C:/Data/Git/Broughton'
 # Processing FLAGS...
 loadtifs <- T # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
 clipdata <- F # If true a spatial subset of the data will be taken based on a polygon shape file. 
-scaledat <- T # If true, imported data will be scaled using raster::scale().
+scaledat <- T # If true, imported data will transformed, centered, and scaled.
 reclust  <- T # If true, re-cluster full data set prior to mapping, else predict to unclassified pixels.
 addKmDat <- T
 
@@ -56,10 +56,11 @@ if (loadtifs) {
 
   tif_stack <- src_stack
   
-  # The landside on the MSEA bathymetry is not of interest to the classification.
-  # Deeper areas are also unsuitable for kelps. This removes those pixels from all rasters
+  # bathymetry is trimmed for landside and unsuitable depths for kelps.
+  # Land and deep elevations are removed from the MSEA bathymetry
+  # From Substrate produce hard only, marking kelp suitable areas. 
+  # These restrictions manifest when completeCases() are selected.
   tif_stack <- DropNonHabitat( tif_stack, -5, 40 )
-  print('Unsuitable elevations removed.')
 
   if (clipdata) {
     print( "clipping TIFs ... ")
@@ -68,18 +69,9 @@ if (loadtifs) {
     tif_stack <- ClipPredictors( tif_stack, amask )
     print('Rasters clipped.')
   }
-  
-  if (scaledat) {
-    print( "Centering  TIFs ... ")
-    tmp_stack <- scale( tif_stack, scale=F )
-    tif_stack <- tmp_stack
-    print('Rasters centered.')
-  }
 
-  save( src_stack, file = paste0( data_dir, '/src_stack_', today, '.rData' ))
   save( tif_stack, file = paste0( data_dir, '/tif_stack_', today, '.rData' ))
-  save( tif_stack, file = paste0( data_dir, '/tifs_DFO_scaled_QCS_', today, '.rData' ))
-  
+
 } else {
   print( 'Loading project data ... ')
   # Ideally meaningfully named and tested so no source is required.
@@ -97,42 +89,58 @@ if (loadtifs) {
 #   but no problem evident in results. Less useful with trimmed data, but may still have 
 #   value for larger data sets.
 
+#Vestigial. Could be useful for even larger data? May not be suitable for some data.
 #prepped_layers <- Integerize( tif_stack )
-prepped_layers <- tif_stack
+
+# Move to matrix space from raster space 
+stack_data <- getValues( tif_stack )
 
 #-- Quick correlation across data layers
-x <- getValues( prepped_layers )
+x <- stack_data
 x_clean <- x[ complete.cases(x), ]
 cor_table <- cor( x_clean )
 cor_table[lower.tri(cor_table)] <- NA
 (cor_table >= 0.6) & (cor_table != 1)
 
-#-- Remove correlated layers (see RMD document) 
-prepped_layers <- dropLayer( prepped_layers, c("bathymetry", "SUBSTRATE", "salinity_range", "temp_mean_summer", "circ_mean_summer",
+#-- Remove correlated layers from raster stack
+selected_stack <- dropLayer( tif_stack, c("bathymetry", "SUBSTRATE", "salinity_range", "temp_mean_summer", "circ_mean_summer",
                                     "sst_sentinel_20m_bi_mean", "sst_sentinel_20m_bi_sd") )
-names( prepped_layers )
+stack_data <- getValues( selected_stack )
 
+#-- Visualize unmodified source raster data
+dim( selected_stack )
+names( selected_stack )
+plot( selected_stack )
+histogram(selected_stack, nclass=50)
+
+# Prepare the data for classification.
+if (scaledat) {
+  
+  print( "Transforming data  ... ")
+  # REMOVE fix some (hard-coded) distributions by adding ceilings and root transforms.
+  t_stack_data <- MakeMoreNormal( stack_data )
+  
+  print( "Centering and scaling  ... ")
+  tmp_stack <- scale( t_stack_data, center=T,  scale=T )
+  t_stack_data <- tmp_stack
+  print('Data prepped.')
+}
+
+par(mfrow = c(2, 4))
+for (i in 1:dim(t_stack_data)[2]) {
+x <- hist(t_stack_data[, i], nclass=50, main = colnames(t_stack_data)[i], xlab="")
+print(x)
+}
+
+skewness( selected_stack$rei_qcs, na.rm=T )
 # RENAME variables - after selection.
 
-#-- Visualize source data
-dim( prepped_layers )
-names( prepped_layers )
-plot( prepped_layers )
-raster::hist(prepped_layers, nclass=50)
-par(mfrow = c(1, 1))
-
-#-- Finalize the data for exploring and creating the clusters.
-  # Extract the data for the cluster analyses
-stack_data <- getValues( prepped_layers )
-
-# REMOVE fix some (hard-coded) distributions by adding ceilings and root transforms.
-t_stack_data <- MakeMoreNormal( stack_data )
 
 # remove any rows with an NA
 # NB: This decouples the data from the RasterStack and requires re-assembly for mapping
 # THESE are the two key data structures used in subsequent steps
-clean_idx <- complete.cases(stack_data)
-stack_data_clean <- stack_data[ clean_idx, ]
+clean_idx <- complete.cases(t_stack_data)
+stack_data_clean <- t_stack_data[ clean_idx, ]
 
 dim( stack_data )
 dim( stack_data_clean )
