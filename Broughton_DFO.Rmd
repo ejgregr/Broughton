@@ -21,15 +21,18 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
                       fig.width = 7, fig.height = 5.5,dpi = 300, out.width = '100%', fig.align="center")
 knitr.table.format = 'html'
 ```
-This work will support 2 distinct, but related projects. First, for DFO, the classification will provide a framework, based on the existing, substantial body of existing data, to support the organisation and subsequent analysis of relevant macroalgal data for the Pacific Regions. Second, as pat of the BC-funded climate ready seafood program, this work will provide a regional classification of the Broughton region that will provide a summary of local physical data relevant to local communities. We hope it will provide a pathway to weave together scientific and Indigenous knowledge, while also underpinning the spatial analyses envisioned by the Local Seaweed Services Model (LSSM).
+This work is Part One of a classification exercise intended to partition nearshore coastal waters into ecologigally meaningful clusters. The objective here is available kelp habitat - floating plants attached to hard substrate. Part Two of the work (the Broughton LSSM) explores more general(?) classifications.
+
+This script describes the classification framework delivered to DFO, defined using a substantial body of existing data, to support the organisation and analysis of relevant macroalgal data for the Pacific Regions. 
 
 # Objective
-From the DFO statement of work: This project will provide an R script to generate clusters representing areas of common environmental conditions from existing spatial layers, with examples of outputs generated across two spatial extents (i.e., Broughton Archipelago and the Queen Charlotte Strait region).
-
-From the Broughton RSSM proposal, the objective is to classify the study area into a polygon representation suitable for supporting the spatial analyses of the LSSM. We will; 1) standardize available data sets to best reasonable spatial resolution (likely the local 20 x 20 m2 bathymetric grid - Davies et al. 2020); and 2) Prepare a classification analysis examining how spatial extents influence clusters created with the k-means clustering algorithm.
+From the DFO SOW: This project will provide an R script to generate clusters representing areas of common environmental conditions from existing spatial layers, with examples of outputs generated across two spatial extents (i.e., Broughton Archipelago and the Queen Charlotte Strait region).
 
 ## Background   
 Following the methods of Mora-Soto et al. 2024, create a k-means clustering of biophysical layers to support the representation of kelp habitat in British Columbia, with a particular focus on the Broughton region.
+
+K-means is described as sensitive to the 'shape' of the data (e.g., range, distribution). Much attention was therefore paid to outliers and skewness. All predictors were centered, then transformed if necessary, and finally scaled so all predictors contribute equally.
+
 
 ## Data summary
 

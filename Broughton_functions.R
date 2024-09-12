@@ -14,7 +14,7 @@
 # check for any required packages that aren't installed and install them
 required.packages <- c( "ggplot2", "reshape2", "tidyr","dplyr", "raster", "stringr", "rasterVis",
                         "RColorBrewer", "factoextra", "ggpubr", "cluster", "rmarkdown","lubridate",
-                        "knitr")
+                        "knitr", "e1071", "MASS", "car")
 
 # "diffeR", "vegan", "ranger", "e1071", "forcats", "measures", "caret", "PresenceAbsence"
 # "randomForest", "spatialEco", "xlsx", "robustbase", "biomod2", "sp", "magrittr", "tinytex", "rmarkdown", "binr", 'gwxtab'
@@ -75,17 +75,48 @@ LoadPredictors <- function( pred_dir, add_km_dat ){
   return( raster_stack)
 }
 
-#----
+#---- Three layers that needed some work. ----
+# Fixed by adding ceilings and root transforms.
 
-
-
-#----
-
-
-
-
-
-
+MakeMoreNormal <- function( the_stack ){
+  x <- the_stack[, "rei_qcs"]
+#  skewness(x, na.rm=T)
+  ceil <- 0.3
+  y <- ifelse(x > ceil, ceil, x)
+  range(y, na.rm=T)
+#  skewness(y, na.rm=T)
+  y <- y^(1/2)
+  the_stack[, "rei_qcs"] <- y
+  
+ #histogram(y)
+  
+  x <- the_stack[, "qcs_freshwater_index"]
+#  skewness(x, na.rm=T)
+  ceil <- 0.025
+  y <- ifelse(x > ceil, ceil, x)
+  range(y, na.rm=T)
+#  skewness(y, na.rm=T)
+  y <- y^(1/3)
+  the_stack[, "qcs_freshwater_index"] <- y
+  
+  #histogram(y)
+  
+  x <- the_stack[, "standard_deviation_slope"]
+#  range(x, na.rm=T)
+  ceil <- 10
+  y <- ifelse(x > ceil, ceil, x)
+#  range(y, na.rm=T)
+  skewness(y, na.rm=T)
+  y <- y^0.5
+  the_stack[, "standard_deviation_slope"] <- y
+  
+  x <- the_stack[, "temp_range"]
+#  skewness(x, na.rm=T)
+  y <- x^0.5
+  the_stack[, "temp_range"] <- y
+ 
+  return( the_stack) 
+}
 
 # Calculate the minimum extents for the rasters in the raster directory. 
 # This is applied to all the rasters and sets the extents of the clustering data
@@ -110,10 +141,11 @@ CalcMinExtents <- function( rasdir ){
 }
 
 
-#---- Set unsuitable elevations to NA ----
+#---- Does double duty: Sets unsuitable elevations and bottom types to NA ----
+# Modifies two rasters in place. 
 DropNonHabitat <- function( data_in, zmin, zmax ){
   
-  # To avoid spurious scaling and classification, and outliers, this 
+  # BATHY: To avoid spurious scaling and classification, and outliers, this 
   # removes all data above the HHWL (assumed to be 5 m) AND below 40 m depth. 
   # NOTE: Hard-coded for three MSEA layers.
   
@@ -130,36 +162,29 @@ DropNonHabitat <- function( data_in, zmin, zmax ){
     data_in[[i]] <- setMinMax( data_in[[i]] )
   }
   
+  # SUBSTRATE: Categoricals are hard in k-means. Easier to filter like depth. 
+  # Sets values  >'2' to NA. 
+  # A binary, hard/soft map may be useful.
+  
+  a <- getValues( tif_stack$SUBSTRATE )
+  histogram(a)
+  
+  # build the required trim index to apply to all layers ... 
+  trim_data <- getValues( data_in$SUBSTRATE )
+  trim_idx <- (trim_data > 2 )
+  trim_data[ trim_idx ] <- NA
+  
+  for (i in 1:dim(data_in)[[3]] ){
+    
+    trim_data <- getValues( data_in[[i]] )
+    trim_data[ trim_idx ] <- NA
+    data_in[[i]] <- setValues( data_in[[i]], trim_data )
+    data_in[[i]] <- setMinMax( data_in[[i]] )
+  }
   print( "Nonhabitat removed.")
   return( data_in )
 }
 
-#   # Create the 'base' raster stack - it determines spatial reference. 
-#   x <- raster( raster.list[1] )
-#   raster.stack <- addLayer( raster.stack, x)
-#   out.extent <- extent(x)
-#   out.proj   <- crs( x )
-#   
-#   # Untested code for adjusting a raster ... 
-#   for (i in 2:length(raster.list)) {
-#     # unfortunate these have to be separate
-#     print( raster.names[[i]] )
-#     z <- raster( raster.list[i] )
-#     z.proj <- crs(z) 
-#     z.ext  <-extent( z ) 
-#     if ( (z.ext == out.extent) & (z.proj@projargs == out.proj@projargs) ){
-#       raster.stack <- addLayer( raster.stack, z)
-#     } else {
-#       print( (z.ext == out.extent) )
-#       print( (z.proj@projargs == out.proj@projargs) )
-#       # zz <- fixed raster ...
-# #      crs( z ) <- CRS( out.proj )
-#       crs( z ) <- out.proj
-#       extent( z ) <- out.extent
-#       z <- crop(z, out_extent)
-#       raster.stack <- addLayer( raster.stack, z)
-#     }
-#   }
 
 
 #---- ClipPredictors: masks away deeper water and limits extents based on a polygon mask
@@ -347,6 +372,9 @@ transferCluster <- function(values_target, c_result){
   # reassign to the plotting raster
   return( values_target )
 }
+
+
+
 
 
 

@@ -16,11 +16,11 @@
 #   code so this version focuses on DFO data/objectives and Broughton2 attends to the LSSM needs.
 # 2024/05/29: Back after summer. Nothing this WILL NOT use Romina's data.
 # 2024/08/30: Back on this. Renamed the 2 projects for clarity, and updated here with LSSM progress. 
-
-
-# TO DO: 
-#  Design RMD report
-#  Add config section to allow an RMD report to be built for selected extents.
+# 2024/09/10: Working now. Have spent days looking at distributions, outliers, and skew. 
+#   Substrate has now joined bathy as a necessary characteristic. Almost ready to to start running 
+#   some RMD reports and comparing results.
+# 2024/09/11: A few minor(ish) changes: consolidate all changes to data (ie, transforming, centering, 
+#   scaling) in one place. Bathy and Substrate applied as exclusions. 
 #################################################################################
 
 print('Starting Broughton - DFO Version ...')
@@ -37,7 +37,7 @@ data_dir   <- 'C:/Data/Git/Broughton/Data'
 rmd_dir    <- 'C:/Data/Git/Broughton' 
 
 # Processing FLAGS...
-loadtifs <- F # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
+loadtifs <- T # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
 clipdata <- F # If true a spatial subset of the data will be taken based on a polygon shape file. 
 scaledat <- T # If true, imported data will be scaled using raster::scale().
 reclust  <- T # If true, re-cluster full data set prior to mapping, else predict to unclassified pixels.
@@ -70,10 +70,10 @@ if (loadtifs) {
   }
   
   if (scaledat) {
-    print( "Scaling TIFs ... ")
-    tmp_stack <- scale( tif_stack )
+    print( "Centering  TIFs ... ")
+    tmp_stack <- scale( tif_stack, scale=F )
     tif_stack <- tmp_stack
-    print('Rasters Scaled.')
+    print('Rasters centered.')
   }
 
   save( src_stack, file = paste0( data_dir, '/src_stack_', today, '.rData' ))
@@ -83,10 +83,12 @@ if (loadtifs) {
 } else {
   print( 'Loading project data ... ')
   # Ideally meaningfully named and tested so no source is required.
-  load( paste0( data_dir, '/tifs_DFO_scaled_QCS_2024-09-04.rData' ))
+#  load( paste0( data_dir, '/tifs_DFO_scaled_QCS_2024-09-05.rData' ))
+#  load( paste0( data_dir, '/tifs_DFO_centred_QCS_2024-09-05.rData' ))
+  load( paste0( data_dir, '/tif_stack_2024-09-05.rData' ))
 }
 
- 
+
 #---- Final data preparation ----
 #NOTE: Everything from here down is in scaled units. 
 
@@ -106,7 +108,7 @@ cor_table[lower.tri(cor_table)] <- NA
 (cor_table >= 0.6) & (cor_table != 1)
 
 #-- Remove correlated layers (see RMD document) 
-prepped_layers <- dropLayer( prepped_layers, c("bathymetry", "salinity_range", "temp_mean_summer", "circ_mean_summer",
+prepped_layers <- dropLayer( prepped_layers, c("bathymetry", "SUBSTRATE", "salinity_range", "temp_mean_summer", "circ_mean_summer",
                                     "sst_sentinel_20m_bi_mean", "sst_sentinel_20m_bi_sd") )
 names( prepped_layers )
 
@@ -122,15 +124,19 @@ par(mfrow = c(1, 1))
 #-- Finalize the data for exploring and creating the clusters.
   # Extract the data for the cluster analyses
 stack_data <- getValues( prepped_layers )
-  # remove any rows with an NA
-  # NB: This decouples the data from the RasterStack and requires re-assembly for mapping
 
+# REMOVE fix some (hard-coded) distributions by adding ceilings and root transforms.
+t_stack_data <- MakeMoreNormal( stack_data )
+
+# remove any rows with an NA
+# NB: This decouples the data from the RasterStack and requires re-assembly for mapping
 # THESE are the two key data structures used in subsequent steps
 clean_idx <- complete.cases(stack_data)
 stack_data_clean <- stack_data[ clean_idx, ]
 
 dim( stack_data )
 dim( stack_data_clean )
+
 
 #---- Part 2 of 3: Cluster number selection ----
 
@@ -199,7 +205,7 @@ par(mfrow = c(1, 1))
 plot(sk, col = 1:nclust, border=NA, main = "Hi World" )
 
 
-#---- Part 3: Detailed examination of N clusters  ----
+#---- Part 3 of 3: Detailed examination of N clusters  ----
 #---- Part 3a: Show cluster groupings using PCA ----
 
 #-- Can take some time so it makes its own cluster 
@@ -278,52 +284,6 @@ writeRaster( cluster_raster, paste0( data_dir, "/SPEC_7clusterb.tif"), overwrite
 
 
 #---- 
-#----Outlier Detection ----
-# Work with the full data set. 
-cluster_result$centers
-
-  # create a df w the centers for each cluster to facilitate distance calculation.
-centers <- cluster_result$centers[cluster_result$cluster, ] 
-head(centers)
-  # calculate distance
-distances <- sqrt(rowSums((stack_data_clean - centers )^2))
-head(x)
-outlier_idx <- order(distances, decreasing=T)[1:1000000]
-
-#print(stack_data_clean[outlier_idx,])
-
-# Redo the cluster work with the outliers removed ... 
-dim( stack_data_clean )
-stack_data_clean <- stack_data_clean[ -outlier_idx,]
-dim( stack_data_clean )
-
-# Plot the outliers.
-  # Note: These outliers are in cluster space, but the plots below are in the original 
-  # space of the scaled variables. And while there are clearly a few outliers in the 
-  # scaled variables (for which we should do a page of box plots), its the combination 
-  # that creates ouitliers in the cluster analysis. Interesting.
-
-  # NB: Testing clustering with outliers removed (up to 1M) creates a bit less dispersion 
-  # but the shapes remain. 
-
-# a subsample to reduce the plot size ... 
-ssidx <- sample( 1:length( stack_data_clean[ , 1] ), 1000 )
-
-plot(stack_data_clean[ ssidx, c("bathymetry", "fetch") ], pch=19, col=cluster_result$cluster[ ssidx ], cex=1)
-points(cluster_result$centers[ ,c("bathymetry", "fetch") ], col=1:3, pch=15, cex=2)
-#points(stack_data_clean[ outlier_idx, c("bathymetry", "fetch") ], pch="+", col=4, cex=3)
-
-p_axes <- c("rugosity", "standard_deviation_slope") 
-plot(stack_data_clean[ ssidx, p_axes ], pch=19, col=cluster_result$cluster[ ssidx ], cex=1)
-points(cluster_result$centers[ , p_axes ], col=1:3, pch=15, cex=2)
-points(stack_data_clean[ outlier_idx, p_axes ], pch="+", col=4, cex=3)
-
-p_axes <- c("rugosity", "tidal") 
-plot(stack_data_clean[ ssidx, p_axes ], pch=19, col=cluster_result$cluster[ ssidx ], cex=1)
-points(cluster_result$centers[ , p_axes ], col=1:3, pch=15, cex=2)
-points(stack_data_clean[ outlier_idx, p_axes ], pch="+", col=4, cex=3)
-
-
 
 
 #---- Knit and render Markdown file -----
@@ -358,7 +318,22 @@ rmarkdown::render( "Broughton_DFO.Rmd",
 #pick <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
 #plot( stack_data_clean[ pick,'rugosity'] ~ stack_data_clean[ pick,'standard_deviation_slope'] )
 
-#---- ----
+#---- 
+
+#---- Plot any classified outliers in classified space --
+# create a df w the centers for each cluster to facilitate distance calculation.
+centers <- cluster_result$centers[cluster_result$cluster, ] 
+head(centers)
+# calculate distance
+distances <- sqrt(rowSums((stack_data_clean - centers )^2))
+head(x)
+outlier_idx <- order(distances, decreasing=T)[1:1000000]
+# a subsample to reduce the plot size ... 
+ssidx <- sample( 1:length( stack_data_clean[ , 1] ), 10000 )
+
+plot(stack_data_clean[ ssidx, c("rei_qcs", "qcs_freshwater_index") ], pch=19, col=cluster_result$cluster[ ssidx ], cex=1)
+points(cluster_result$centers[ ,c("rei_qcs", "qcs_freshwater_index") ], col=1:3, pch=15, cex=2)
+#----
 
 
 # FIN.
