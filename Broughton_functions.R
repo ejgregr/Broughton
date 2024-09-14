@@ -14,7 +14,7 @@
 # check for any required packages that aren't installed and install them
 required.packages <- c( "ggplot2", "reshape2", "tidyr","dplyr", "raster", "stringr", "rasterVis",
                         "RColorBrewer", "factoextra", "ggpubr", "cluster", "rmarkdown","lubridate",
-                        "knitr", "e1071", "MASS", "car")
+                        "knitr", "tinytex", "kableExtra", "e1071")
 
 # "diffeR", "vegan", "ranger", "e1071", "forcats", "measures", "caret", "PresenceAbsence"
 # "randomForest", "spatialEco", "xlsx", "robustbase", "biomod2", "sp", "magrittr", "tinytex", "rmarkdown", "binr", 'gwxtab'
@@ -93,14 +93,14 @@ MakeMoreNormal <- function( the_stack ){
   
  #histogram(y)
   
-  x <- the_stack[, "qcs_freshwater_index"]
-#  skewness(x, na.rm=T)
-  ceil <- 0.025
-  y <- ifelse(x > ceil, ceil, x)
-  range(y, na.rm=T)
-#  skewness(y, na.rm=T)
-  y <- y^(1/3)
-  the_stack[, "qcs_freshwater_index"] <- y
+#   x <- the_stack[, "qcs_freshwater_index"]
+# #  skewness(x, na.rm=T)
+#   ceil <- 0.025
+#   y <- ifelse(x > ceil, ceil, x)
+#   range(y, na.rm=T)
+# #  skewness(y, na.rm=T)
+#   y <- y^(1/3)
+#   the_stack[, "qcs_freshwater_index"] <- y
   
   #histogram(y)
   
@@ -191,7 +191,6 @@ DropNonHabitat <- function( data_in, zmin, zmax ){
 }
 
 
-
 #---- ClipPredictors: masks away deeper water and limits extents based on a polygon mask
 ClipPredictors <- function( stack_in, the_mask){
   z <- stack()
@@ -219,10 +218,8 @@ Integerize <- function( in_layers, sig = 1000 ) {
 }
 
 
-
-
 #---- MakeScreePlot: returns a ggplot. ----
-# samp is optional, uses all dat if omitted.
+# sampsize is optional, uses all dat if omitted.
 MakeScreePlot <- function( indat, nclust, nrand, maxi, sampsize = 0 ){
   #initialize list for results
   wss <- numeric(nclust) 
@@ -300,13 +297,13 @@ ClusterPCA <- function( n_samp, clustnum ) {
   pca_scores   <- data.frame(res_pca$x)
   pca_loadings <- pca_loadings * max(abs(pca_scores$PC1), abs(pca_scores$PC2))
 
-  arrow_plot <- a +
+  plot_D1D2 <- a +
     geom_segment(data = pca_loadings, aes(x = 0, y = 0, xend = PC1, yend = PC2),
                  arrow = arrow(length = unit(0.2, "cm")), color = "blue") +
     geom_text(data = pca_loadings, aes(x = PC1, y = PC2, label = rownames(pca_loadings)), 
               hjust = 0, vjust = 1, color = "red")
 
-  b <- ggscatter(
+  plot_D3D4 <- ggscatter(
     ind_coord, x = "Dim.3", y = "Dim.4", 
     color = "cluster", palette = "simpsons", ellipse = TRUE, ellipse.type = "convex",
     size = 1.5,  legend = "right", ggtheme = theme_bw(),
@@ -316,9 +313,8 @@ ClusterPCA <- function( n_samp, clustnum ) {
     stat_mean(aes(color = cluster), size = 4)
  
   print( "Done clusters ...")
-  return( list(res_pca, arrow_plot, b))
+  return( list( res_pca, plot_D1D2, plot_D3D4 ))
 }
-
 
 
 #---- PredictClusters: returns cluster assignments for un-clustered pictures. ----

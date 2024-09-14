@@ -3,29 +3,31 @@ title: "Cluster analysis of nearshore physical predictors"
 author: "Edward Gregr"
 date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output:
-  html_document: 
-    keep_md: yes
-    theme: yeti
-    highlight: haddock
-    toc: yes
-    toc_float: yes
+  pdf_document:
+    keep_tex: true       # Keep intermediate LaTeX file for troubleshooting
+    latex_engine: pdflatex # Specify the LaTeX engine (pdflatex, xelatex, or lualatex). This renders the pdf
+    number_sections: true # Optional, if you want numbered sections
+    toc: true             # Table of contents (optional)
+    fig_caption: true     # Enable figure captions
+fontsize: 11pt            # Set font size (optional)
+geometry: margin=1in      # Set margins (optional)
+header-includes:
+   - \usepackage{pdflscape}  # for landscape pages
+   - \usepackage{booktabs} # for tables
 ---
-<style type="text/css">
-#TOC {
-  color: black;
-}
-</style>
+
 
 ```{r Introduction, include=FALSE, cache= FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
                       fig.width = 7, fig.height = 5.5,dpi = 300, out.width = '100%', fig.align="center")
-knitr.table.format = 'html'
+knitr.table.format = 'pdf'
 ```
+# Introduction
 This work is Part One of a classification exercise intended to partition nearshore coastal waters into ecologigally meaningful clusters. The objective here is available kelp habitat - floating plants attached to hard substrate. Part Two of the work (the Broughton LSSM) explores more general(?) classifications.
 
 This script describes the classification framework delivered to DFO, defined using a substantial body of existing data, to support the organisation and analysis of relevant macroalgal data for the Pacific Regions. 
 
-# Objective
+## Objective
 This project provides an R script to generate clusters representing areas of common environmental conditions from existing spatial layers. Examples of outputs are generated across three spatial extents: The full QCS 'data' region, a smaller, region with higher data quality, and a small, self-similar area within the Broughton Archipelago.
 
 ## Background   
@@ -33,25 +35,25 @@ Following the methods of Mora-Soto et al. 2024, create a k-means clustering of b
 
 K-means is described as sensitive to the 'shape' of the data (e.g., range, distribution). Much attention was therefore paid to outliers and skewness. All predictors were centered, then transformed if necessary, and finally scaled so all predictors contribute equally.
 
+## K-means classification
+Standard K-means clustering works by minimizing the Euclidean distance between data points and centroids. It is thus designed for continuous numeric data. 
+Euclidean distance also means that k-means will strive for clusters of uniform in size, is very sensitive to outliers, assumes that data points in each cluster form a sphere around each centroid (KDnuggets 2024). 
+Categorical variables cannot be directly used in standard K-means clustering as they do not have a meaningful Euclidean distance. While methods for mixed data exist (e.g., in the R cluster package), the clustering on non-Euclidean distances is more time consuming. Thus, these methods have limits on the size of the data (e.g., the pam() algorithm is limited to 65,000 observations). Given that the QCS study area contains over 17,000,000 valid pixels structuring a re-sampling analysis using these tools was deemed out of scope.
+Guidance on selecting the appropriate number of clusters include examining the within sum of squares, average silhouette width, gap analysis, and the separation of the clusters (via Principal Component Analysis).
+Cluster analysis can be open-ended if there are no data for validation given that results can vary with the different data sets included and the number of clusters.
+
 # Data preparation
 In discussions with the Project Manager, the layers of interest (Table 1) were chosen to reflect the best available coast-wide coverage at a resolution of 20x20 m2. Recent work on classifying substrate (Gregr et al. 2020) and species distribution (Nephin et al. 2016) has been based on this spatial framework, and the various layers are regularly updated by DFO. The data were provided by DFO as TIF files and were loaded directly into R. 
 Rasters are all assumed to have the same projection and resolution. As part of the data loading process, the rasters are standardized to the combined minimum spatial extents to resolve any differences in spatial extents. The coastwide Sentinel SST data were re-sampled onto the same spatial reference. 
 Following Barbosa et al., unsuitable depths are removed from the source data. Not only is this critical for the bathymetry-based roughness layers (as the bathymetry includes upland areas), it also focuses the clustering on the photic zone. Bathymetry was then dropped as a classifying predictor. Since clustering is only done for compete cases, this restriction defines the extent of the classification.
 
-__*Table 1: Data sources for predictors.*__"
+
+## Description of the predictors considered and the processes they represent.
 | Process         | Predictor          | Description and rationale  |
-|-----------------|-----------------|-----------------|
-| Light, Energy   | bathymetry      | Kelps are light restricted and thus depth is essential for creating clusters limited to the photic zone. Following Barbosa et al., we used the bathymetry to mask out unsuitable depths rather than use it as a classifying variable.                                   |
-| Circulation     | circ_mean_summer     | intended proxy for water mass movements     |
-|                 | tidal_mean_summer   | A representation of diurnal and fortnight tidal ranges |
-| Freshwater input | fresh_index        | Kelps do better in higher salinity waters, as salinity tends to be correlated with both cooler temperatures and increased nutrients. We used a simple diffusion model developed by MSEA which shows potentially low salinity areas based on point estimates of riverine input (from the BC Freshwater Atlas).|
-|Relative exposure index | REI | In addition to influencing substrate, exposure is also an indicator of mixing and can also influence zoospore settlement. This updated exposure layer from MSEA includes depth attenuated, relative exposure index combines fetch with wind and depth. |
-|Salinity	| salinity_mean_summer,salinity_range     |         |
-|Temperature 	| sentinel_max          |       |
-|             | sentinel_mean         |       |
-|             | sentinel_sd           |       |
-|             | temp_mean_summer      |       |
-|             |temp_range             |       |
+|-----------------|--------------------|-----------------------------|
+| **Light, Energy**   | bathymetry          | Kelps are light-restricted, so depth is crucial for forming clusters in the photic zone. As per Barbosa et al., bathymetry is used to mask unsuitable depths instead of being a classifying variable. |
+| **Circulation**     | circMeanSummer     | Proxy for water mass movements.   |
+|                   | tidalMeanSummer     | Representation of diurnal and fortnightly tidal ranges.  |
 
 # Preliminary predictor assessment
 
@@ -60,6 +62,7 @@ Dimensions of the loaded Raster stack.
 dim(selected_stack)
 ```
 
+\begin{landscape}
 Examine correlations across predictors, and identify those beyond a threshold of 0.6.
 ```{r Correlations, echo=FALSE }
 # Caption is part of kable()
@@ -67,7 +70,7 @@ Examine correlations across predictors, and identify those beyond a threshold of
 
 y_low <- lower.tri(cor_table, diag = TRUE)
 cor_table[ y_low ] <- NA
-knitr::kable( cor_table, caption = "__*Table 2: Correlation matrix for assessing predictor cross-correlations*__")
+knitr::kable( cor_table, caption = "Table 2: Correlation matrix for assessing predictor cross-correlations")
 
 x <- 0.6
 high_rows <- apply(cor_table, 1, function(row) any(row > x, na.rm = TRUE))
@@ -76,9 +79,10 @@ z <- cor_table[ high_rows, ]
 kable( z, caption = "Predictor variables that exceed 0.6 threshold")
 
 ```
+\end{landscape}
 
 
-__*Table 3: Transforms, how they were done and the results.*__
+Table 3: Transforms, how they were done and the results.
 ```{r FixingDistribs, echo=FALSE }
 
 print( "Hi World!")
@@ -93,11 +97,11 @@ print( "Hi World!")
 [This is where we put all the talk about predictor selection, based on the table and histos above, leading to histos below]
 
 
-```{r echo=FALSE, fig.cap="__*Figure 1: Maps of the selected, unmodified predictors.*__"}
+```{r echo=FALSE, fig.cap="Maps of the selected, unmodified predictors."}
 plot( selected_stack )
 ```
 
-```{r echo=FALSE, fig.cap="__*Figure 2: Histograms of the selected, unmodified predictors.*__"}
+```{r echo=FALSE, fig.cap="Histograms of the selected, unmodified predictors."}
 raster::hist( selected_stack, nclass=50 )
 ```
 
@@ -112,7 +116,7 @@ for (i in 1:dim(t_stack_data)[2]) {
 }
 ```
 
-```{r FixedHists, echo=FALSE, fig.cap="__*Figure 3: Histograms of selected, transformed and scaled predictor data.*__"}
+```{r FixedHists, echo=FALSE, fig.cap="Histograms of selected, transformed and scaled predictor data."}
 # Plot updated histograms
 
 par(mfrow = c(2, 3))
@@ -123,40 +127,39 @@ for (i in 1:length(x)) {
 
 # Results
 ## Part 1 - Cluster number
-```{r ScreePlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="__*Figure 4: Scree plot showing the total within sum-of-squares across a range of cluster numbers.*__"}
+```{r ScreePlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="Scree plot showing the total within sum-of-squares across a range of cluster numbers."}
 plotme
 ```
 
-```{r HeatMap, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="__*Figure 5: Heat map showing within cluster standard deviation of the predictors.*__"}
+```{r HeatMap, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="Heat map showing within cluster standard deviation of the predictors."}
 z_heat
 ```
 
-```{r SilhouettePlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="__*Figure 6: Silhouette plot showing pixel membership in each cluster and silhouette widths.*__"}
+```{r SilhouettePlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="Figure 6: Silhouette plot showing pixel membership in each cluster and silhouette widths."}
 plot(sk, col = 1:nclust, border=NA )
 ```
 
 
-## Part 2: Clusters and predictor loadings 
+## Part 2: Clusters and predictor loadings
 
-```{r PCAPlots, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="__*Figure 7: PCA Plots for a) dimensions 1 and 2, and b) dimensions 3 and 4.*__"}
-pca_plots
+```{r PCAPlots, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="PCA Plots for a) dimensions 1 and 2, and b) dimensions 3 and 4.*__"}
+plot( pca_results$plot1 )
+plot( pca_results$plot2 )
 ```
 
-```{r ViolinPlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="__*Figure 8: Violing plots showing distribiton of predictors in each of the k-means clusters.*__"}
+```{r PCATable, warning=FALSE, message=FALSE, echo=FALSE, tab.cap="Loadings on the principal components by the selected predictor variables. "}
+
+pca_results$table1
+```
+
+
+
+```{r ViolinPlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="Violin plots showing distribiton of predictors in each of the k-means clusters."}
 vplots
 ```
 
 
-__*Table XX: Need some tablulated PCA loadings ... .*__
-```{r MetricsDataAll, warning=FALSE, message=FALSE, echo=FALSE}
-
-# For the chinook project, ran all the code to produce stuff here. 
-# This time, we will only be referring to objects already created by the main script.
-
-```
-
-
-
+\newpage
 # Addendums
 
 ## R packages

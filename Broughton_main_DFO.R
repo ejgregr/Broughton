@@ -37,7 +37,7 @@ data_dir   <- 'C:/Data/Git/Broughton/Data'
 rmd_dir    <- 'C:/Data/Git/Broughton' 
 
 # Processing FLAGS...
-loadtifs <- T # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
+loadtifs <- F # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
 clipdata <- F # If true a spatial subset of the data will be taken based on a polygon shape file. 
 scaledat <- T # If true, imported data will transformed, centered, and scaled.
 reclust  <- T # If true, re-cluster full data set prior to mapping, else predict to unclassified pixels.
@@ -77,7 +77,9 @@ if (loadtifs) {
   # Ideally meaningfully named and tested so no source is required.
 #  load( paste0( data_dir, '/tifs_DFO_scaled_QCS_2024-09-05.rData' ))
 #  load( paste0( data_dir, '/tifs_DFO_centred_QCS_2024-09-05.rData' ))
-  load( paste0( data_dir, '/tif_stack_2024-09-05.rData' ))
+
+ load( paste0( data_dir, '/tif_stack_2024-09-13.rData' ))
+#  load( paste0( data_dir, '/t_stack_data_2024-09-14.rData' ))
 }
 
 
@@ -103,7 +105,7 @@ cor_table[lower.tri(cor_table)] <- NA
 (cor_table >= 0.6) & (cor_table != 1)
 
 #-- Remove correlated layers from raster stack
-selected_stack <- dropLayer( tif_stack, c("bathymetry", "SUBSTRATE", "salinity_range", "temp_mean_summer", "circ_mean_summer",
+selected_stack <- dropLayer( tif_stack, c("bathymetry", "SUBSTRATE", "qcs_freshwater_index", "salinity_range", "temp_mean_summer", "circ_mean_summer",
                                     "sst_sentinel_20m_bi_mean", "sst_sentinel_20m_bi_sd") )
 stack_data <- getValues( selected_stack )
 
@@ -124,17 +126,19 @@ if (scaledat) {
   tmp_stack <- scale( t_stack_data, center=T,  scale=T )
   t_stack_data <- tmp_stack
   print('Data prepped.')
+  save( t_stack_data, file = paste0( data_dir, '/t_stack_data', today, '.rData' ))
+  print('Scaled data saved.')
 }
 
-par(mfrow = c(2, 4))
-for (i in 1:dim(t_stack_data)[2]) {
-x <- hist(t_stack_data[, i], nclass=50, main = colnames(t_stack_data)[i], xlab="")
-print(x)
-}
+### Histograms of scaled vars only in RMD. 
+# par(mfrow = c(2, 4))
+# for (i in 1:dim(t_stack_data)[2]) {
+# x <- hist(t_stack_data[, i], nclass=50, main = colnames(t_stack_data)[i], xlab="")
+# print(x)
+# }
 
-skewness( selected_stack$rei_qcs, na.rm=T )
-# RENAME variables - after selection.
-
+# Compare pre-post skew? Put it on the histograms! :)
+# RENAME variables after selection for plot prettiness.
 
 # remove any rows with an NA
 # NB: This decouples the data from the RasterStack and requires re-assembly for mapping
@@ -162,7 +166,7 @@ plotme
 
 #---- Create a working set of N clusters (N based on scree plot) to further assess cluster number. ----
 
-nclust  <- 7 # the number of clusters based on scree plot, above.
+nclust  <- 5 # the number of clusters based on scree plot, above.
 nsample <- 500000 # a larger sample for more robust classification
 
 sidx <- sample( 1:length( stack_data_clean[ , 1] ), nsample )
@@ -219,8 +223,9 @@ plot(sk, col = 1:nclust, border=NA, main = "Hi World" )
 #-- Can take some time so it makes its own cluster 
 pca_n <- 25000
 
-pca_plots <- ClusterPCA( pca_n, nclust ) # uses global variable stack_data_clean
-pca_plots
+#Returns a list of results (loadings table, and 2 plots)
+pca_results <- ClusterPCA( pca_n, nclust ) # uses global variable stack_data_clean
+names(pca_results) <- c("loadings", "plot1","plot2")
 
 #Percentage of variance explained by dimensions
 #eigenvalue <- round(get_eigenvalue(res_pca), 1)
@@ -236,16 +241,18 @@ y <- x %>%
   pivot_longer(cols = -cluster, names_to = "predictor", values_to = "value")
 
 # Create violin plot
-ggplot(y, aes(x = cluster, y = value, fill = cluster)) +
+vplots <- 
+  ggplot(y, aes(x = cluster, y = value, fill = cluster)) +
   geom_violin(trim = FALSE) +
   facet_wrap(~ predictor, scales = "free_y") +
   theme_minimal() +
   labs(title = "Violin Plots of Predictors Across k-means Clusters",
        x = "Cluster",
        y = "Value")
+vplots
 
 
-#---- Part 3c: Spatialize the WORKING clusters ----
+#---- Part 4: Spatialize the WORKING clusters ----
 # NB: To show a comprehensive map, can either:
 #     a) re-cluster the entire data set (using imax and randomz from above) or
 #     b) Predict to the unsampled portion of the raster. 
@@ -291,25 +298,35 @@ z_map
 writeRaster( cluster_raster, paste0( data_dir, "/SPEC_7clusterb.tif"), overwrite=TRUE)
 
 
-#---- 
+
+
+y <- hist(t_stack_data[, i], nclass=50, main = colnames(t_stack_data)[i], xlab="")
+
 
 
 #---- Knit and render Markdown file -----
+# 2024/04/29: It looks like this has gotten easier in the last 2 years ... version up!
+
+
 ### Process file 
 # To HTML ... 
 rmarkdown::render( "Broughton_DFO.Rmd",   
                    output_format = 'html_document',
-                   output_dir = rmd_dir )  
-
-# 2024/04/29: It looks like this has gotten easier in the last 2 years ... version up!
+                   output_file = paste0( "C:/Data/Git/Broughton/Results/DFO_Class_Report_", today ) )
 
 # To PDF:
-# First had to install the library tinytex.
+# the tinytex library is necessary for compiling the .tex file to be rendered.
 # then run >tinytex::install_tinytex()
 # ... and done. 
-rmarkdown::render( "Broughton_DFO.Rmd",   
+rmarkdown::render( ".Rmd",   
                    output_format = 'pdf_document',
-                   output_dir = rmd_dir )  
+                   output_file = "C:/Data/Git/Broughton/Results/" )  
+
+
+rmarkdown::render( "Rebuild_RMD.Rmd",   
+                   output_format = 'pdf_document',
+                   output_dir ="C:/Data/Git/Broughton/Results",
+                   output_file = paste0( "DFO_Class_Report_", today ))
 
 
 #---- Some details on correlation analysis ... ----
