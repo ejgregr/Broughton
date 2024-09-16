@@ -1,46 +1,86 @@
-raster.list <- list.files(path = raster_dir, pattern = '\\.tif$', full.names = TRUE)
+load( paste0( data_dir, '/tif_stack_2024-09-05.rData' ))
+prepped_layers <- dropLayer( tif_stack, c("bathymetry", "SUBSTRATE", "salinity_range", "temp_mean_summer", "circ_mean_summer",
+                                               "sst_sentinel_20m_bi_mean", "sst_sentinel_20m_bi_sd") )
 
-x <- raster( raster.list[ 1] )
-str(x)
-dim(x)
+stack_data <- getValues(prepped_layers)
 
-if (cellStats(x, min) < -5) {
-  values(x)[ values(x) < 0 ] <- NA }
+#---- Outlier Detection ----
+skews <- vector()
+for (i in 1:dim(stack_data)[2]) {
+  j <- skewness( stack_data[,i], na.rm = T )
+  skews <- c( skews, j)
+}
+names(skews) <-  colnames(stack_data)
 
-raster::plot(x, maxpixels = 2000000 )
-
-writeRaster( x, paste0( data_dir, "/foo.tif"), overwrite=TRUE)
-
-
+skews <- as.data.frame(skews)
+skews <- cbind( skews, "lambda" = 0)
+skews
 
 
 
-# make a list of predictor rasters
-raster.list <- list.files(path = raster_dir, pattern = '\\.tif$', full.names = TRUE)
+j <- stack_data[ !is.na(stack_data[,1]),1]
+skewness(j)
+
+if (abs( skewness( j )) > 1) {
+  j <- j+abs(min(j))
+  bc_result <- boxcox( lm(j+1~1) )
+  lambda <- bc_result$x[ which.max( bc_result$y )]
+  skews[i, "lambda"] <- lambda
+  t_data <- (j^lambda - 1) / lambda
+} else {
+  t_data <-i }
+
+skewness(t_data[1:2000], na.rm=T) #doesnt work with above t_data. only for some subsets
+
+
+
+j <- j+abs(min(j))
+t_data <- car::powerTransform( j+1 )
+
+skewness(t_data, na.rm=T)
+
+sum(j==0)/length(j)
+j_trans <- j^(1/5) #not asn()
+histogram(j_trans)
+skewness(j_trans, na.rm=T)
+
+
+# Drop all the zeros?
+range(j)
+j <- stack_data[ !is.na(stack_data[,1]),1]
+j <- j[ !(j==0)]
+
+
+
+foo <- fixDistributions( stack_data_clean, skews)
+
+#Input is a matrix with columns as predictors, and the skew vector
+fixDistributions <- function( a_stack, skews ){
+  t_stack <- stack
   
-  # make list of raster names (without extension)
-  raster.names <- lapply(raster.list, FUN = function(raster.layer){
-    substr(basename(raster.layer), 1, nchar(basename(raster.layer)) - 4)
-  } )
-  
-  # create a raster stack from raster_list
-
-raster.stack <- raster::stack(x = raster.list)
-
-names(raster.stack)
-foo <- getValues(raster.stack$bathymetry)
-min( na.omit(foo) )
-max( na.omit(foo) )
-
-
-names(scaled_layers)
-
-str(scaled_layers$bathymetry)
-
-x <- getValues( scaled_layers[[1]] )
+  for (i in 1:dim(a_stack)[2]) {
+    print(i)
+    j <- a_stack[,i] # ith column
+    if (abs( skewness( j )) > 1) {
+        
+      
+      skews[i, "lambda"] <- lambda
+      t_data <- (j^lambda - 1) / lambda
+      t_stack <- stack( t_stack, t_data)
+    } else {
+      t_stack <- stack(t_stack, i) }
+  }
+  return(t_stack)
+}
 
 
-names(data_layers)
+
+
+
+
+
+
+
 
 
 

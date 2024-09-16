@@ -76,18 +76,17 @@ kable(descrip_table, format = "latex", booktabs = TRUE,
       caption = "Description of the predictors considered and the processes they represent")  %>%
   kable_styling() %>%
   column_spec(1, width = "1in", latex_column_spec = "p{1in}") %>% 
-  column_spec(2, width = "1.25in", latex_column_spec = "p{1in}") %>% 
-  column_spec(3, width = "3in", latex_column_spec = "p{3in}")     
+  column_spec(2, width = "1.5in", latex_column_spec = "p{1.5in}") %>% 
+  column_spec(3, width = "3.5in", latex_column_spec = "p{3.5in}")     
 
 ```
 
 # Preliminary predictor assessment
 
-The loaded Raster stack is `r dim(selected_stack)[1]` by `r dim(selected_stack)[2]`, giving a total of `r dim(selected_stack)[1] * dim(selected_stack)[2]` pixels in the study domain. Much of this area is land, or deeper waters excluded by the bathymetry.
+The loaded Raster stack is `r dim(selected_stack)[1]` by `r dim(selected_stack)[2]`, giving a total of `r scales::comma( dim(selected_stack)[1] * dim(selected_stack)[2])` pixels in the study domain. Much of this area is land, or deeper waters excluded by the bathymetry.
 
-The loaded data were examined for 
-Skewness of the predictors
-```{r SkewTable, echo=FALSE }
+The loaded data were examined for Skewness of the predictors
+```{r SkewTable, results='asis', echo=FALSE, table.pos='t'}
 skdat <- NULL
 for (i in 1:dim(t_stack_data)[2]) {
  x <- skewness( t_stack_data[,i], na.rm=TRUE) 
@@ -102,7 +101,7 @@ kable_styling(latex_options = "hold_position")
 ```
 
 Examine correlations across predictors, and identify those beyond a threshold of 0.6.
-```{r Correlations, echo=FALSE, tab.pos='t' }
+```{r Correlations, results='asis', echo=FALSE, table.pos='t' }
 # Caption is part of kable()
 # Using global: cor_table 
 
@@ -136,7 +135,7 @@ print( "Hi World!")
 [This is where we put all the talk about predictor selection, based on the table and histos above, leading to histos below]
 
 
-```{r echo=FALSE, fig.cap="Maps of the selected, unmodified predictors."}
+```{r echo=FALSE, fig.pos='t', fig.cap="Maps of the selected, unmodified predictors."}
 plot( selected_stack )
 ```
 
@@ -155,7 +154,7 @@ for (i in 1:dim(t_stack_data)[2]) {
 }
 ```
 
-```{r FixedHists, echo=FALSE, fig.cap="Histograms of selected, transformed and scaled predictor data."}
+```{r FixedHists, echo=FALSE, results='asis', fig.pos='t', fig.cap="Histograms of selected, transformed and scaled predictor data."}
 # Plot updated histograms
 
 par(mfrow = c(2, 3))
@@ -169,15 +168,15 @@ perhaps some words in here will help.
 
 
 ## Part 1 - Cluster number
-```{r Fig4_ScreePlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="Scree plot showing the total within sum-of-squares across a range of cluster numbers."}
+```{r Fig4_ScreePlot, warning=FALSE, message=FALSE, echo=FALSE, fig.pos='t', fig.cap="Scree plot showing the total within sum-of-squares across a range of cluster numbers."}
 plotme
 ```
 
-```{r HeatMap, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="Heat map showing within cluster standard deviation of the predictors."}
+```{r HeatMap, warning=FALSE, message=FALSE, echo=FALSE, fig.pos='t', fig.cap="Heat map showing within cluster standard deviation of the predictors."}
 z_heat
 ```
 
-```{r SilhouettePlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="Silhouette plot showing pixel membership in each cluster and silhouette widths."}
+```{r SilhouettePlot, warning=FALSE, message=FALSE, echo=FALSE, fig.pos='t', fig.cap="Silhouette plot showing pixel membership in each cluster and silhouette widths."}
 plot(sk, col = 1:nclust, border=NA )
 ```
 
@@ -185,17 +184,17 @@ plot(sk, col = 1:nclust, border=NA )
 ## Part 2 - Clusters and predictor loadings
 First we do PCA plots and then we show loadings as violin plots. A table of loadings should also be here. 
 
-```{r Fig7_PCAPlot1, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="PCA Plots showing the clusters across the first and second dimensions."}
+```{r Fig7_PCAPlot1, warning=FALSE, message=FALSE, echo=FALSE, fig.pos='t', fig.cap="PCA Plots showing the clusters across the first and second dimensions."}
 plot( pca_results$plot1 )
 ```
 
-```{r PCAPlot2, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="PCA Plots showing the clusters across the third and fourth  dimensions."}
-#plot( pca_results$plot2 )
+```{r PCAPlot2, warning=FALSE, message=FALSE, echo=FALSE, fig.pos='t', fig.cap="PCA Plots showing the clusters across the third and fourth  dimensions."}
+plot( pca_results$plot2 )
 ```
 
 Impressions of how the clusters are formed ... 
 
-```{r PCATable, warning=FALSE, message=FALSE, echo=FALSE, tab.cap="Loadings on the principal components by the selected predictor variables. "}
+```{r PCATable, warning=FALSE, message=FALSE, echo=FALSE, table.pos='t', tab.cap="Loadings on the principal components by the selected predictor variables."}
 
 knitr::kable( pca_results$loadings$rotation, format = "latex", booktabs = TRUE, 
               caption = "Correlation matrix for assessing predictor cross-correlations") %>%
@@ -205,7 +204,7 @@ knitr::kable( pca_results$loadings$rotation, format = "latex", booktabs = TRUE,
 
 Impressions of how the lower dimensions of the PCA contribute ... 
 
-```{r ViolinPlot, warning=FALSE, message=FALSE, echo=FALSE, fig.cap="Violin plots showing distribiton of predictors in each of the k-means clusters."}
+```{r ViolinPlot, warning=FALSE, message=FALSE, echo=FALSE, fig.pos='t', fig.cap="Violin plots showing distribiton of predictors in each of the k-means clusters."}
 vplots
 ```
 
