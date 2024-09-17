@@ -35,10 +35,11 @@ source( "broughton_functions.R" )
 raster_dir <- 'C:/Data/SpaceData/Classification/MSEA'
 data_dir   <- 'C:/Data/Git/Broughton/Data'
 rmd_dir    <- 'C:/Data/Git/Broughton' 
+results_dir<- 'C:/Data/Git/Broughton/Results' 
 
 # Processing FLAGS...
-loadtifs <- F # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
-clipdata <- F # If true a spatial subset of the data will be taken based on a polygon shape file. 
+loadtifs <- T # If true the data will be re-loaded from TIFs, else it will be loaded from rData.
+clipdata <- T # If true a spatial subset of the data will be taken based on a polygon shape file. 
 scaledat <- T # If true, imported data will transformed, centered, and scaled.
 reclust  <- T # If true, re-cluster full data set prior to mapping, else predict to unclassified pixels.
 addKmDat <- T
@@ -139,6 +140,11 @@ if (scaledat) {
 
 # Compare pre-post skew? Put it on the histograms! :)
 # RENAME variables after selection for plot prettiness.
+
+new_names <- c("bathymetry", "substrate", "standard_dev_slope, arc-chord rugosity",
+               "circ_mean_summer, tidal_mean_summer", "freshwater_index, salt_mean_summer, 
+               salt_range", "rei", "sentinel_max, sentinel_mean, sentinel_sd, temp_mean_summer, temp_range")
+
 
 # remove any rows with an NA
 # NB: This decouples the data from the RasterStack and requires re-assembly for mapping
@@ -257,8 +263,13 @@ vplots
 #     a) re-cluster the entire data set (using imax and randomz from above) or
 #     b) Predict to the unsampled portion of the raster. 
 
+# Building a predictor raster takes time. Not useful to run this until 
+# a comparison RMD report is being generated. 
+
+out_tif_fname <- paste0( '/MSEA_gdata_5cluster_', today, '.tif' )
+
 # initialize target data structure 
-cluster_raster <- prepped_layers[[1]]
+cluster_raster <- selected_stack[[1]]
 dataType(cluster_raster) <- "INT1U"
 cluster_raster[] <- NA
 
@@ -295,13 +306,7 @@ z_map <- levelplot( cluster_raster, margin = F,
            main = "K-means Clustering Result - Local extents" )
 z_map
 
-writeRaster( cluster_raster, paste0( data_dir, "/SPEC_7clusterb.tif"), overwrite=TRUE)
-
-
-
-
-y <- hist(t_stack_data[, i], nclass=50, main = colnames(t_stack_data)[i], xlab="")
-
+writeRaster( cluster_raster, paste0( results_dir, out_tif_fname ), overwrite=TRUE)
 
 
 #---- Knit and render Markdown file -----
@@ -317,16 +322,10 @@ rmarkdown::render( "Broughton_DFO.Rmd",
 # To PDF:
 # the tinytex library is necessary for compiling the .tex file to be rendered.
 # then run >tinytex::install_tinytex()
-# ... and done. 
-rmarkdown::render( ".Rmd",   
-                   output_format = 'pdf_document',
-                   output_file = "C:/Data/Git/Broughton/Results/" )  
-
-
-rmarkdown::render( "Rebuild_RMD.Rmd",   
+rmarkdown::render( "Broughton_DFO_PDF.Rmd",   
                    output_format = 'pdf_document',
                    output_dir ="C:/Data/Git/Broughton/Results",
-                   output_file = paste0( "DFO_Class_Report_", today ))
+                   output_file = paste0( "MSEA_gdata_5cluster_", today ))
 
 
 #---- Some details on correlation analysis ... ----
